@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konoha Vivant — Jeu</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="520"></canvas>
+  <div id="legend">
+    <b>Déplacer</b> ← →  ·  <b>Sauter</b> Espace  ·  <b>Dash</b> Maj  ·  <b>Coup</b> J
+    <span class="sep">|</span>
+    <b>Rasengan</b> K · <b>Oodama</b> O · <b>Rasen-Shuriken</b> L · <b>Kage Bunshin</b> U · <b>Kyūbi</b> I
+    <span class="sep">|</span>
+    <b>Encaisser</b> H · <b>K.O.</b> G
+  </div>
+  <div id="tune">
+    orbe dans la main — portée <input id="reach" type="range" min="0" max="0.9" step="0.02" value="0.34"><span id="reachV">0.34</span>
+    · hauteur <input id="handh" type="range" min="0.25" max="0.85" step="0.02" value="0.55"><span id="handhV">0.55</span>
+    <a href="index.html" class="back">← atelier</a>
+  </div>
+</div>
+<script src="data/naruto.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
