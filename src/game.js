@@ -1,196 +1,149 @@
-/* Konoha Vivant - moteur (tranche verticale : Naruto jouable).
-   Reutilise le decoupage valide de window.KV_CHARS.naruto.
-   Marche en double-clic (file://) et dans Electron. */
+/* Konoha Vivant - moteur (persos autonomes).
+   Naruto vit tout seul (IA a venir : comportement scripte pour l'instant).
+   Clique un ninja pour le controler. Marche en double-clic (file://) et Electron. */
 (function(){
   "use strict";
   var CH=(window.KV_CHARS||{}).naruto;
   var cv=document.getElementById("game"), ctx=cv.getContext("2d");
   ctx.imageSmoothingEnabled=false;
-  var W=cv.width, H=cv.height, GROUND=H-64;
-  var K=(CH.scaleTo||170)/(CH.refH||63);
+  var W=cv.width, H=cv.height, GROUND=Math.round(H*0.84);
+  var K=(CH.scaleTo||115)/(CH.refH||63);
 
+  // planche perso
   var img=new Image(), ready=false;
   img.onload=function(){ready=true;}; img.onerror=function(){ready="err";}; img.src=CH.sheet;
+  // decors
+  var DECOR_DIR="../assets/backgrounds/";
+  var decorImg=new Image(), decorReady=false;
+  function loadDecor(name){ decorReady=false; decorImg=new Image();
+    decorImg.onload=function(){decorReady=true;}; decorImg.src=(DECOR_DIR+name).replace(/ /g,"%20"); }
+  loadDecor("Training Field.png");
+  var dsel=document.getElementById("decor");
+  if(dsel) dsel.addEventListener("change",function(){ loadDecor(dsel.value); });
 
-  // reglages en direct (orbe dans la main)
-  var reach=0.34, handh=0.55;
-  function bind(id,fn){var e=document.getElementById(id);if(e)e.addEventListener("input",fn);}
-  bind("reach",function(e){reach=parseFloat(e.target.value);document.getElementById("reachV").textContent=reach.toFixed(2);});
-  bind("handh",function(e){handh=parseFloat(e.target.value);document.getElementById("handhV").textContent=handh.toFixed(2);});
-
-  // physique (px/s)
-  var RUN=210, DASH=560, JUMP=560, GRAV=1550;
-
-  var keys={};
-  window.addEventListener("keydown",function(e){
-    if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].indexOf(e.code)>=0)e.preventDefault();
-    if(!keys[e.code]) onPress(e.code);
-    keys[e.code]=true;
-  });
-  window.addEventListener("keyup",function(e){keys[e.code]=false;});
-
-  var p={x:W*0.42,y:GROUND,vx:0,vy:0,facing:1,onGround:true,
-         anim:"idle",frame:0,ft:0,dir:1,hold:0,
-         lock:false,actAnim:null,actT:0,actDur:0,dashT:0,pending:null};
-
-  var fxList=[], clones=[], puffs=[];
-
+  var RUN_A=115, RUN_P=210, DASH=560, JUMP=520, GRAV=1550;
+  function rand(a,b){return a+Math.random()*(b-a);}
+  function pick(a){return a[Math.floor(Math.random()*a.length)];}
+  function clamp(v,a,b){return v<a?a:(v>b?b:v);}
   function A(n){return CH.anims[n];}
-  function dur(n,extra){var a=A(n);return (a.frames.length/(a.fps||8))*1000+(extra||0);}
-  function setFree(anim){ if(p.anim!==anim){p.anim=anim;p.frame=0;p.ft=0;p.dir=1;p.hold=0;} }
-
-  function startAction(anim,extra){ p.lock=true;p.actAnim=anim;p.actT=0;p.actDur=dur(anim,extra);p.frame=0;p.anim=anim; }
+  function has(n){return A(n)&&A(n).frames&&A(n).frames.length;}
+  function hasFx(n){return A(n)&&A(n).fx&&A(n).fx.length;}
+  function durOf(n,extra){var a=A(n);return (a.frames.length/(a.fps||8))*1000+(extra||0);}
 
   var JUTSU={
-    rasengan:{anim:"rasengan",fx:"rasengan",mode:"attach",big:false},
-    oodama_rasengan:{anim:"oodama_rasengan",fx:"oodama_rasengan",mode:"attach",big:true},
+    rasengan:{anim:"rasengan",fx:"rasengan",mode:"attach"},
+    rising_rasengan:{anim:"rising_rasengan",fx:"rising_rasengan",mode:"attach"},
+    ryujin_rasengan:{anim:"ryujin_rasengan",fx:"ryujin_rasengan",mode:"attach"},
     rasen_shuriken:{anim:"rasen_shuriken",fx:"rasen_shuriken",mode:"proj"},
     kage_bunshin:{anim:"kage_bunshin",mode:"clones"},
-    kyuubi_3t:{anim:"kyuubi_3t",mode:"transform"}
+    kyuubi_3t:{anim:"kyuubi_3t",mode:"transform"},
+    attack:{anim:"attack",mode:"melee"},
+    strong:{anim:"strong",mode:"melee"}
   };
-  function hasFx(n){return A(n)&&A(n).fx&&A(n).fx.length;}
+  var AUTO_MOVES=["rasengan","rasengan","rasen_shuriken","kage_bunshin","attack","strong","rising_rasengan","kyuubi_3t"];
 
-  function cast(name){
-    var J=JUTSU[name]; if(!J||!A(J.anim))return;
-    startAction(J.anim, J.mode==="transform"?400:150);
-    if(J.mode==="attach") fxList.push({kind:"attach",fx:(hasFx(J.fx)?J.fx:name),big:J.big,t:0,dur:p.actDur,diss:450});
-    else if(J.mode==="proj"){ fxList.push({kind:"attach",fx:J.fx,big:false,t:0,dur:p.actDur,diss:0}); p.pending="proj_"+name; }
-    else if(J.mode==="clones") spawnClones();
+  var chars=[], fxList=[], puffs=[], possessed=null;
+
+  function Char(x){
+    this.x=x; this.y=GROUND; this.vx=0; this.vy=0; this.facing=Math.random()<0.5?1:-1; this.onGround=true;
+    this.anim="idle"; this.frame=0; this.ft=0; this.dir=1; this.hold=0;
+    this.lock=false; this.actAnim=null; this.actT=0; this.actDur=0;
+    this.dashT=0; this.brainT=rand(300,1600); this.walkT=0; this.walkDir=0; this.pending=null;
+    this.possessed=false;
   }
-
-  function spawnClones(){
-    for(var s=-1;s<=1;s+=2){
-      var cx=clamp(p.x+s*95,50,W-50);
-      clones.push({x:cx,facing:p.facing,t:0,life:2600});
-      puffs.push({x:cx,y:GROUND-40,t:0,life:520,fx:hasFx("kage_bunshin")?"kage_bunshin":null});
-    }
-  }
-  function clamp(v,a,b){return v<a?a:(v>b?b:v);}
-
-  function onPress(code){
-    if(code==="KeyR"){ /* reset */ p.lock=false;p.dashT=0;fxList=[];clones=[];puffs=[];p.x=W*0.42;p.y=GROUND;p.vx=p.vy=0;setFree("idle");return; }
-    if(p.lock) return;
-    switch(code){
-      case "ShiftLeft": case "ShiftRight":
-        p.dashT=220; p.vx=p.facing*DASH; break;
-      case "Space":
-        if(p.onGround){ p.vy=-JUMP; p.onGround=false; } break;
-      case "KeyJ":
-        startAction(p.onGround?"attack":"attack_air",60); break;
-      case "KeyK": cast("rasengan"); break;
-      case "KeyO": cast("oodama_rasengan"); break;
-      case "KeyL": cast("rasen_shuriken"); break;
-      case "KeyU": cast("kage_bunshin"); break;
-      case "KeyI": cast("kyuubi_3t"); break;
-      case "KeyH": startAction("hurt_light",250); break;
-      case "KeyG":
-        startAction("knockdown",(A("knockdown").holdMs)||900);
-        p.pending="getup"; break;
-    }
-  }
-
-  // ---- update ----
-  function stepFreeAnim(dt){
-    var a=A(p.anim); if(!a||a.frames.length<=1) return;
+  Char.prototype.setFree=function(a){ if(this.anim!==a){this.anim=a;this.frame=0;this.ft=0;this.dir=1;this.hold=0;} };
+  Char.prototype.startAction=function(anim,extra){ this.lock=true;this.actAnim=anim;this.actT=0;this.actDur=durOf(anim,extra);this.frame=0;this.anim=anim; };
+  Char.prototype.cast=function(name){
+    var J=JUTSU[name]; if(!J)return;
+    var anim=J.anim, fx=J.fx||name, big=false;
+    if(name==="rasengan" && Math.random()<0.2 && has("oodama_rasengan")){ anim="oodama_rasengan"; fx="oodama_rasengan"; big=true; } // Oodama = variante rare
+    if(!has(anim))return;
+    this.startAction(anim, J.mode==="transform"?400:120);
+    if(J.mode==="attach") fxList.push({owner:this,fx:(hasFx(fx)?fx:"rasengan"),big:big,t:0,dur:this.actDur,diss:420});
+    else if(J.mode==="proj"){ fxList.push({owner:this,fx:fx,big:false,t:0,dur:this.actDur,diss:0}); this.pending="proj_"+name; }
+    else if(J.mode==="clones") this.spawnClones();
+  };
+  Char.prototype.spawnClones=function(){
+    for(var s=-1;s<=1;s+=2){ var cx=clamp(this.x+s*rand(70,120),50,W-50);
+      puffs.push({x:cx,y:GROUND-30*K,t:0,life:520}); }
+  };
+  Char.prototype.think=function(){
+    var r=Math.random();
+    if(r<0.42){ this.walkDir=Math.random()<0.5?-1:1; this.facing=this.walkDir; this.walkT=rand(600,1700); this.brainT=this.walkT+rand(200,700); }
+    else if(r<0.60){ this.walkDir=0; this.brainT=rand(700,1800); }
+    else if(r<0.68 && this.onGround){ this.vy=-JUMP; this.onGround=false; this.walkDir=0; this.brainT=rand(900,1700); }
+    else { var m=pick(AUTO_MOVES); if(Math.random()<0.04) m="ryujin_rasengan"; this.cast(m); this.brainT=rand(1400,3000); }
+  };
+  Char.prototype.handWorld=function(){
+    var a=A(this.anim), f=a.frames[Math.min(this.frame,a.frames.length-1)];
+    var hx=(f.hx==null?f.r[2]*0.8:f.hx), hy=(f.hy==null?f.r[3]*0.4:f.hy), ax=(f.ax==null?f.r[2]/2:f.ax), h=f.r[3];
+    return { x:this.x + this.facing*(hx-ax)*K, y:this.y - (h-hy)*K };
+  };
+  Char.prototype.stepFree=function(dt){
+    var a=A(this.anim); if(!a||a.frames.length<=1)return;
     var n=a.frames.length;
-    if(p.hold>0){ p.hold-=dt; if(p.hold<=0){p.frame=0;p.dir=1;} return; }
-    p.ft+=dt; var st=1000/(a.fps||8);
-    while(p.ft>=st){ p.ft-=st;
-      if(a.yoyo){ p.frame+=p.dir; if(p.frame>=n-1){p.frame=n-1;p.dir=-1;} else if(p.frame<=0){p.frame=0;p.dir=1;} }
-      else { p.frame=(p.frame+1)%n; }
+    if(this.hold>0){ this.hold-=dt; if(this.hold<=0){this.frame=0;this.dir=1;} return; }
+    this.ft+=dt; var st=1000/(a.fps||8);
+    while(this.ft>=st){ this.ft-=st;
+      if(a.yoyo){ this.frame+=this.dir; if(this.frame>=n-1){this.frame=n-1;this.dir=-1;} else if(this.frame<=0){this.frame=0;this.dir=1;} }
+      else this.frame=(this.frame+1)%n;
     }
-  }
-
-  function update(dtms){
-    var dt=dtms/1000;
-
-    if(p.lock){
-      p.actT+=dtms;
-      var a=A(p.actAnim), fps=a.fps||8;
-      p.frame=Math.min(a.frames.length-1, Math.floor(p.actT/(1000/fps)));
-      p.anim=p.actAnim;
-      // amortir le deplacement pendant une action au sol
-      if(p.onGround) p.vx*=0.8;
-      if(p.actT>=p.actDur){
-        p.lock=false;
-        if(p.pending && p.pending.indexOf("proj_")===0){
-          var jn=p.pending.slice(5), J=JUTSU[jn];
-          var hp=handPoint();
-          fxList.push({kind:"proj",fx:J.fx,x:hp.x,y:hp.y,vx:p.facing*640,t:0,life:900});
-          p.pending=null;
-        } else if(p.pending==="getup"){
-          startAction("getup",0); p.pending=null; // enchaine la releve
-        } else { p.pending=null; }
+  };
+  Char.prototype.update=function(dt){
+    var s=dt/1000;
+    if(this.lock){
+      this.actT+=dt; var a=A(this.actAnim), fps=a.fps||8;
+      this.frame=Math.min(a.frames.length-1, Math.floor(this.actT/(1000/fps))); this.anim=this.actAnim;
+      if(this.onGround) this.vx*=0.8;
+      if(this.actT>=this.actDur){
+        this.lock=false;
+        if(this.pending && this.pending.indexOf("proj_")===0){
+          var jn=this.pending.slice(5), J=JUTSU[jn], hp=this.handWorld();
+          fxList.push({kind:"proj",fx:J.fx,x:hp.x,y:hp.y,vx:this.facing*620,t:0,life:900});
+        }
+        this.pending=null;
       }
+    } else if(this.possessed){
+      if(this.dashT>0){ this.dashT-=dt; if(this.dashT<=0)this.vx*=0.3; }
+      else { var mv=0; if(keys["ArrowLeft"]||keys["KeyA"])mv-=1; if(keys["ArrowRight"]||keys["KeyD"])mv+=1;
+        if(mv){this.facing=mv;this.vx=mv*RUN_P;} else {this.vx*=0.6; if(Math.abs(this.vx)<6)this.vx=0;} }
     } else {
-      // dash
-      if(p.dashT>0){ p.dashT-=dtms; if(p.dashT<=0) p.vx*=0.3; }
-      else {
-        var mv=0;
-        if(keys["ArrowLeft"]||keys["KeyA"]) mv-=1;
-        if(keys["ArrowRight"]||keys["KeyD"]) mv+=1;
-        if(mv!==0){ p.facing=mv; p.vx=mv*RUN; } else { p.vx*=0.6; if(Math.abs(p.vx)<6)p.vx=0; }
-      }
+      // cerveau autonome
+      this.brainT-=dt;
+      if(this.walkT>0){ this.walkT-=dt; this.vx=this.walkDir*RUN_A; }
+      else { this.vx*=0.6; if(Math.abs(this.vx)<6)this.vx=0; }
+      if(this.brainT<=0 && this.onGround) this.think();
     }
-
     // physique
-    p.x+=p.vx*dt;
-    p.vy+=GRAV*dt; p.y+=p.vy*dt;
-    if(p.y>=GROUND){ p.y=GROUND; p.vy=0; p.onGround=true; } else p.onGround=false;
-    p.x=clamp(p.x,40,W-40);
-
-    // choix anim libre
-    if(!p.lock){
-      if(!p.onGround) setFree("jump");
-      else if(p.dashT>0) setFree("dash");
-      else if(Math.abs(p.vx)>12) setFree("run");
-      else setFree("idle");
-      if(p.anim==="jump"){ var jn=A("jump").frames.length; p.frame= p.vy<-60?0 : (p.vy>60?Math.min(2,jn-1):Math.min(1,jn-1)); }
-      else stepFreeAnim(dtms);
+    this.x+=this.vx*s; this.vy+=GRAV*s; this.y+=this.vy*s;
+    if(this.y>=GROUND){ this.y=GROUND; this.vy=0; this.onGround=true; } else this.onGround=false;
+    if(this.x<40){this.x=40; if(!this.possessed){this.walkDir=1;this.facing=1;}}
+    if(this.x>W-40){this.x=W-40; if(!this.possessed){this.walkDir=-1;this.facing=-1;}}
+    // anim libre
+    if(!this.lock){
+      if(!this.onGround) this.setFree("jump");
+      else if(this.dashT>0) this.setFree("dash");
+      else if(Math.abs(this.vx)>12) this.setFree("run");
+      else this.setFree("idle");
+      if(this.anim==="jump"){ var jn=A("jump").frames.length; this.frame=this.vy<-60?0:(this.vy>60?Math.min(2,jn-1):Math.min(1,jn-1)); }
+      else this.stepFree(dt);
     }
-
-    // effets
-    for(var i=fxList.length-1;i>=0;i--){ var e=fxList[i]; e.t+=dtms;
-      if(e.kind==="proj"){ e.x+=e.vx*dt; if(e.t>=e.life||e.x<-60||e.x>W+60) fxList.splice(i,1); }
-      else { if(e.t>=e.dur+e.diss) fxList.splice(i,1); }
-    }
-    for(var c=clones.length-1;c>=0;c--){ clones[c].t+=dtms;
-      if(clones[c].t>=clones[c].life){ puffs.push({x:clones[c].x,y:GROUND-40,t:0,life:520,fx:hasFx("kage_bunshin")?"kage_bunshin":null}); clones.splice(c,1); } }
-    for(var q=puffs.length-1;q>=0;q--){ puffs[q].t+=dtms; if(puffs[q].t>=puffs[q].life) puffs.splice(q,1); }
-  }
-
-  function handPoint(){
-    var a=A(p.anim), f=a.frames[Math.min(p.frame,a.frames.length-1)];
-    var h=f.r[3]*K;
-    return { x:p.x + p.facing*(reach*160), y:p.y - handh*h };
-  }
-
-  // ---- rendu ----
-  function drawBg(){
-    var g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,"#1a2740"); g.addColorStop(0.55,"#243a4e"); g.addColorStop(1,"#3a4a3a");
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-    // collines
-    ctx.fillStyle="rgba(30,50,45,.6)";
-    for(var k=0;k<4;k++){ var cx=k*280-40, cy=GROUND-40; ctx.beginPath(); ctx.ellipse(cx,cy,180,90,0,Math.PI,0); ctx.fill(); }
-    // sol
-    ctx.fillStyle="#2c3326"; ctx.fillRect(0,GROUND,W,H-GROUND);
-    ctx.fillStyle="#3a4432"; ctx.fillRect(0,GROUND,W,4);
-    ctx.strokeStyle="rgba(0,0,0,.25)"; ctx.lineWidth=1;
-    for(var x=0;x<W;x+=48){ ctx.beginPath(); ctx.moveTo(x,GROUND+10); ctx.lineTo(x-14,H); ctx.stroke(); }
-  }
-  function drawChar(anim,frame,x,footY,facing,alpha){
-    var a=A(anim); if(!a||!a.frames.length)return;
-    var f=a.frames[Math.min(frame,a.frames.length-1)], r=f.r, ax=(f.ax==null?r[2]/2:f.ax);
+  };
+  Char.prototype.draw=function(){
+    var a=A(this.anim); if(!a||!a.frames.length)return;
+    var f=a.frames[Math.min(this.frame,a.frames.length-1)], r=f.r, ax=(f.ax==null?r[2]/2:f.ax);
     var w=r[2]*K, h=r[3]*K;
     ctx.save();
-    ctx.globalAlpha=(alpha==null?1:alpha)*0.28; ctx.fillStyle="#000";
-    ctx.beginPath(); ctx.ellipse(x,footY+3,Math.max(16,w*0.32),7,0,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha=(alpha==null?1:alpha);
-    ctx.translate(x,0); ctx.scale(facing,1);
-    ctx.drawImage(img, r[0],r[1],r[2],r[3], -ax*K, footY-h, w, h);
+    ctx.globalAlpha=0.26; ctx.fillStyle="#000";
+    ctx.beginPath(); ctx.ellipse(this.x,this.y+2,Math.max(12,w*0.34),5,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    ctx.translate(this.x,0); ctx.scale(this.facing,1);
+    ctx.drawImage(img, r[0],r[1],r[2],r[3], -ax*K, this.y-h, w, h);
     ctx.restore();
-  }
+    if(this.possessed){ ctx.strokeStyle="#3fb6ff"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(this.x-6,this.y-h-8); ctx.lineTo(this.x,this.y-h-2); ctx.lineTo(this.x+6,this.y-h-8); ctx.stroke(); }
+  };
+
   function drawFxFrame(fxName,idx,cx,cy,scale,alpha){
     var fx=A(fxName)&&A(fxName).fx; if(!fx||!fx.length)return;
     var f=fx[Math.min(idx,fx.length-1)], r=f.r, w=r[2]*K*scale, h=r[3]*K*scale;
@@ -198,53 +151,82 @@
     ctx.drawImage(img, r[0],r[1],r[2],r[3], cx-w/2, cy-h/2, w, h); ctx.restore();
   }
 
-  function render(){
-    drawBg();
-    // clones (derriere)
-    for(var c=0;c<clones.length;c++){ var cl=clones[c]; var fade=Math.min(1,(cl.life-cl.t)/300); drawChar("idle",Math.floor(cl.t/120)%A("idle").frames.length, cl.x, GROUND, cl.facing, 0.9*fade); }
-    // joueur
-    drawChar(p.anim,p.frame,p.x,p.y,p.facing,1);
-    // effets attaches (orbe dans la main) + projectiles
-    for(var i=0;i<fxList.length;i++){ var e=fxList[i];
-      if(e.kind==="attach"){
-        var fxN=A(e.fx)&&A(e.fx).fx? e.fx : null; if(!fxN) continue;
-        var flen=A(fxN).fx.length;
-        var prog=Math.min(1,e.t/Math.max(1,e.dur));
-        var idx= e.t<=e.dur ? Math.floor(prog*flen) : flen-1;
-        var alpha= e.t<=e.dur ? 1 : Math.max(0,1-(e.t-e.dur)/e.diss);
-        var hp=handPoint();
-        drawFxFrame(fxN, idx, hp.x, hp.y, e.big?1.5:1.0, alpha);
-      } else if(e.kind==="proj"){
-        var pl=A(e.fx).fx.length; drawFxFrame(e.fx, Math.floor(e.t/60)%pl, e.x, e.y, 1.0, 1);
-      }
+  // ---- input ----
+  var keys={};
+  window.addEventListener("keydown",function(e){
+    if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].indexOf(e.code)>=0)e.preventDefault();
+    if(!keys[e.code]) onPress(e.code); keys[e.code]=true;
+  });
+  window.addEventListener("keyup",function(e){keys[e.code]=false;});
+  function onPress(code){
+    if(!possessed) return;
+    var c=possessed; if(c.lock) return;
+    switch(code){
+      case "ShiftLeft": case "ShiftRight": c.dashT=220; c.vx=c.facing*DASH; break;
+      case "Space": if(c.onGround){c.vy=-JUMP;c.onGround=false;} break;
+      case "KeyJ": c.startAction(c.onGround?"attack":"attack_air",60); break;
+      case "KeyK": c.cast("rasengan"); break;
+      case "KeyL": c.cast("rasen_shuriken"); break;
+      case "KeyU": c.cast("kage_bunshin"); break;
+      case "KeyI": c.cast("kyuubi_3t"); break;
     }
-    // puffs de fumee
-    for(var q=0;q<puffs.length;q++){ var pf=puffs[q]; var a=Math.max(0,1-pf.t/pf.life);
-      if(pf.fx){ var pfl=A(pf.fx).fx.length; drawFxFrame(pf.fx, Math.floor(pf.t/50)%pfl, pf.x, pf.y, 1.1, a); }
-      else { ctx.save(); ctx.globalAlpha=a*0.8; ctx.fillStyle="#dfe6ef"; ctx.beginPath(); ctx.arc(pf.x,pf.y,10+pf.t*0.05,0,Math.PI*2); ctx.fill(); ctx.restore(); }
-    }
-    // HUD etat
-    ctx.fillStyle="rgba(0,0,0,.35)"; ctx.fillRect(0,0,W,26);
-    ctx.fillStyle="#ff7a2f"; ctx.font="13px monospace"; ctx.textAlign="left";
-    ctx.fillText("Naruto", 12, 18);
-    ctx.fillStyle="#cfd8e6";
-    ctx.fillText("etat: "+(p.lock?p.actAnim:p.anim), 90, 18);
-    ctx.textAlign="right"; ctx.fillStyle="#6f7c8e";
-    ctx.fillText("R = reset", W-12, 18); ctx.textAlign="left";
   }
+  cv.addEventListener("click",function(e){
+    var rect=cv.getBoundingClientRect(), mx=(e.clientX-rect.left)*(W/rect.width), my=(e.clientY-rect.top)*(H/rect.height);
+    var hit=null;
+    for(var i=chars.length-1;i>=0;i--){ var c=chars[i]; var a=A(c.anim), f=a.frames[Math.min(c.frame,a.frames.length-1)];
+      var h=f.r[3]*K, w=f.r[2]*K; if(mx>c.x-w*0.6 && mx<c.x+w*0.6 && my>c.y-h && my<c.y+6){ hit=c; break; } }
+    if(possessed){ possessed.possessed=false; }
+    if(hit && hit!==possessed){ hit.possessed=true; possessed=hit; } else { possessed=null; }
+  });
+
+  // ---- population ----
+  function setCount(n){
+    n=clamp(n,1,14);
+    while(chars.length<n) chars.push(new Char(rand(80,W-80)));
+    while(chars.length>n){ var c=chars.pop(); if(c===possessed)possessed=null; }
+    document.getElementById("count").textContent=n;
+  }
+  document.getElementById("plus").addEventListener("click",function(){ setCount(chars.length+1); });
+  document.getElementById("minus").addEventListener("click",function(){ setCount(chars.length-1); });
+  setCount(6);
 
   // ---- boucle ----
+  function drawDecor(){
+    if(decorReady){
+      var iw=decorImg.width, ih=decorImg.height, sc=Math.max(W/iw,H/ih);
+      var dw=iw*sc, dh=ih*sc; ctx.drawImage(decorImg,(W-dw)/2,(H-dh)/2,dw,dh);
+      ctx.fillStyle="rgba(10,14,20,.18)"; ctx.fillRect(0,0,W,H);
+    } else { ctx.fillStyle="#141b26"; ctx.fillRect(0,0,W,H); }
+    ctx.fillStyle="rgba(0,0,0,.22)"; ctx.fillRect(0,GROUND+6,W,H-GROUND);
+  }
   var last=0;
   function loop(ts){
     requestAnimationFrame(loop);
     var dt=last?ts-last:16; last=ts; if(dt>60)dt=60;
-    if(ready===true){ update(dt); render(); }
-    else {
-      ctx.fillStyle="#0d1017"; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle=ready==="err"?"#ff6b6b":"#8895a7"; ctx.font="14px monospace"; ctx.textAlign="center";
-      ctx.fillText(ready==="err"?("planche introuvable: "+CH.sheet):"chargement...", W/2, H/2);
-      ctx.textAlign="left";
-    }
+    if(ready!==true){ ctx.fillStyle="#0d1017";ctx.fillRect(0,0,W,H);
+      ctx.fillStyle=ready==="err"?"#ff6b6b":"#8895a7";ctx.font="14px monospace";ctx.textAlign="center";
+      ctx.fillText(ready==="err"?("planche introuvable: "+CH.sheet):"chargement...",W/2,H/2);ctx.textAlign="left"; return; }
+    var i;
+    for(i=0;i<chars.length;i++) chars[i].update(dt);
+    for(i=fxList.length-1;i>=0;i--){ var e=fxList[i]; e.t+=dt;
+      if(e.kind==="proj"){ e.x+=e.vx*(dt/1000); if(e.t>=e.life||e.x<-60||e.x>W+60) fxList.splice(i,1); }
+      else { if(e.t>=e.dur+e.diss) fxList.splice(i,1); } }
+    for(i=puffs.length-1;i>=0;i--){ puffs[i].t+=dt; if(puffs[i].t>=puffs[i].life) puffs.splice(i,1); }
+
+    drawDecor();
+    chars.sort(function(a,b){return a.y-b.y;});
+    for(i=0;i<chars.length;i++) chars[i].draw();
+    for(i=0;i<fxList.length;i++){ var ef=fxList[i];
+      if(ef.kind==="proj"){ var pl=A(ef.fx).fx.length; drawFxFrame(ef.fx,Math.floor(ef.t/60)%pl,ef.x,ef.y,1,1); }
+      else { var fxN=hasFx(ef.fx)?ef.fx:null; if(!fxN)continue; var flen=A(fxN).fx.length;
+        var prog=Math.min(1,ef.t/Math.max(1,ef.dur)); var idx=ef.t<=ef.dur?Math.floor(prog*flen):flen-1;
+        var al=ef.t<=ef.dur?1:Math.max(0,1-(ef.t-ef.dur)/ef.diss);
+        var hp=ef.owner.handWorld(); drawFxFrame(fxN,idx,hp.x,hp.y,ef.big?1.6:1.0,al); } }
+    for(i=0;i<puffs.length;i++){ var pf=puffs[i], a=Math.max(0,1-pf.t/pf.life);
+      ctx.save(); ctx.globalAlpha=a*0.85; ctx.fillStyle="#e6ecf4";
+      for(var k=0;k<7;k++){ var an=k/7*Math.PI*2; var rr=6+pf.t*0.05; ctx.beginPath(); ctx.arc(pf.x+Math.cos(an)*rr,pf.y+Math.sin(an)*rr*0.7,7,0,Math.PI*2); ctx.fill(); }
+      ctx.restore(); }
   }
   requestAnimationFrame(loop);
 })();
