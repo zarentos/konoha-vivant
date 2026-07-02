@@ -189,13 +189,13 @@
   }
   document.getElementById("plus").addEventListener("click",function(){ setCount(chars.length+1); });
   document.getElementById("minus").addEventListener("click",function(){ setCount(chars.length-1); });
-  setCount(6);
+  setCount(1);
 
   // ---- boucle ----
   function drawDecor(){
     if(decorReady){
       var iw=decorImg.width, ih=decorImg.height, sc=Math.max(W/iw,H/ih);
-      var dw=iw*sc, dh=ih*sc; ctx.drawImage(decorImg,(W-dw)/2,(H-dh)/2,dw,dh);
+      var dw=iw*sc, dh=ih*sc; ctx.drawImage(decorImg,(W-dw)/2,H-dh,dw,dh);
       ctx.fillStyle="rgba(10,14,20,.18)"; ctx.fillRect(0,0,W,H);
     } else { ctx.fillStyle="#141b26"; ctx.fillRect(0,0,W,H); }
     ctx.fillStyle="rgba(0,0,0,.22)"; ctx.fillRect(0,GROUND+6,W,H-GROUND);
@@ -220,7 +220,7 @@
     for(i=0;i<fxList.length;i++){ var ef=fxList[i];
       if(ef.kind==="proj"){ var pl=A(ef.fx).fx.length; drawFxFrame(ef.fx,Math.floor(ef.t/60)%pl,ef.x,ef.y,1,1); }
       else { var fxN=hasFx(ef.fx)?ef.fx:null; if(!fxN)continue; var flen=A(fxN).fx.length;
-        var prog=Math.min(1,ef.t/Math.max(1,ef.dur)); var idx=ef.t<=ef.dur?Math.floor(prog*flen):flen-1;
+        var idx=Math.floor(ef.t/55)%flen;
         var al=ef.t<=ef.dur?1:Math.max(0,1-(ef.t-ef.dur)/ef.diss);
         var hp=ef.owner.handWorld(); drawFxFrame(fxN,idx,hp.x,hp.y,ef.big?1.6:1.0,al); } }
     for(i=0;i<puffs.length;i++){ var pf=puffs[i], a=Math.max(0,1-pf.t/pf.life);
