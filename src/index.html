@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konoha Vivant — Atelier d'animations</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header>
+      <h1>KONOHA<span>VIVANT</span></h1>
+      <p class="tag">atelier d'animations · découpage direct des planches</p>
+      <label class="charpick">
+        Personnage
+        <select id="charSel"></select>
+      </label>
+    </header>
+    <div id="animList"></div>
+    <footer>
+      <span id="count">–</span> animations chargées
+    </footer>
+  </aside>
+
+  <main id="stage">
+    <div id="viewport">
+      <canvas id="cv" width="520" height="420"></canvas>
+      <div id="hud">
+        <span id="curName">idle</span>
+        <span id="curInfo">frame 1/1 · 8 fps</span>
+      </div>
+    </div>
+    <div id="controls">
+      <button id="playBtn" class="ctl" title="Lecture / pause">⏸ Pause</button>
+      <button id="prevBtn" class="ctl" title="Frame précédente">⟨</button>
+      <button id="nextBtn" class="ctl" title="Frame suivante">⟩</button>
+      <label class="speed">Vitesse
+        <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1">
+        <span id="speedVal">1×</span>
+      </label>
+      <label class="chk"><input type="checkbox" id="fxChk"> Afficher l'effet</label>
+      <label class="chk"><input type="checkbox" id="gridChk" checked> Repères</label>
+    </div>
+  </main>
+</div>
+<script src="data/naruto.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
