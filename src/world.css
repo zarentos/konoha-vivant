@@ -1,0 +1,160 @@
+/* Konoha Vivant — palette reprise de sharingan-cam (l'ancienne interface de Raph) */
+@import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');
+
+:root{
+  --ink:#0e1118; --ink2:#161b26; --plate:#2a3140; --plate2:#343d4f;
+  --orange:#e8731c; --orange2:#ffa040; --leaf:#3a8a4a; --sharingan:#cc1518;
+  --txt:#e8ecf2; --dim:#8a93a4; --line:#3a4254;
+  --parch:#e9ddc2; --parch2:#d8c9a4;
+  --titre:'Russo One','Arial Black',Impact,sans-serif;
+  --ui:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--ink);color:var(--txt);font-family:var(--ui)}
+body{background:radial-gradient(1200px 700px at 50% -10%,#1b2331 0%,var(--ink) 60%)}
+
+#wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 14px 20px}
+
+/* ---------- bandeau ---------- */
+#top{width:100%;max-width:1000px;display:flex;align-items:center;gap:14px}
+#titre{font-family:var(--titre);font-size:19px;letter-spacing:1.5px;color:var(--txt);
+  text-transform:uppercase;line-height:1;display:flex;align-items:center;gap:9px}
+#titre b{color:var(--orange);font-weight:400}
+#titre::before{content:"";width:11px;height:11px;border-radius:50%;
+  background:var(--sharingan);box-shadow:0 0 12px var(--sharingan),inset 0 0 3px #000}
+#ia{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim);
+  border:1px solid var(--line);border-radius:20px;padding:5px 12px;background:var(--ink2);white-space:nowrap}
+#ia.on{color:#8de6a4;border-color:#2f6a45;background:#16241c;box-shadow:0 0 14px rgba(90,220,140,.10)}
+#lien{color:var(--dim);text-decoration:none;font-size:11px;font-family:var(--mono);
+  border:1px solid var(--line);border-radius:20px;padding:5px 11px;background:var(--ink2)}
+#lien:hover{color:var(--orange);border-color:var(--orange)}
+
+/* ---------- scene ---------- */
+#stage{position:relative;max-width:100%;border-radius:14px;
+  box-shadow:0 30px 90px rgba(0,0,0,.65),0 0 0 1px var(--line)}
+#world{image-rendering:pixelated;image-rendering:crisp-edges;display:block;width:1000px;
+  border-radius:14px;max-width:100%;height:auto;background:var(--ink);cursor:grab}
+#world:active{cursor:grabbing}
+
+/* ---------- barre de commandes ---------- */
+#bar{width:100%;max-width:1000px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.btn{background:var(--plate);color:var(--txt);border:1px solid var(--line);border-radius:9px;
+  padding:7px 12px;font-family:var(--ui);font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:.12s;white-space:nowrap}
+.btn:hover{background:var(--plate2);border-color:var(--orange)}
+.btn.on{background:var(--orange);border-color:var(--orange2);color:#12161d}
+.sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+.fld{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim);
+  font-family:var(--mono);white-space:nowrap}
+.fld input[type=range]{accent-color:var(--orange);width:76px}
+.fld b{color:var(--txt);font-weight:400;min-width:30px;display:inline-block;text-align:right}
+.grow{flex:1}
+
+/* ---------- reglages ---------- */
+#reg{position:absolute;top:12px;right:12px;width:266px;display:none;z-index:5;
+  background:rgba(16,20,29,.97);border:1px solid var(--line);border-radius:12px;padding:13px;
+  box-shadow:0 24px 70px rgba(0,0,0,.7);backdrop-filter:blur(4px)}
+#reg.on{display:block}
+#reg h4{font-family:var(--titre);font-size:11px;letter-spacing:1.3px;text-transform:uppercase;
+  color:var(--orange);margin:0 0 9px;font-weight:400}
+#reg h4+h4{margin-top:15px}
+#reg label{display:flex;align-items:center;justify-content:space-between;gap:9px;
+  font-size:11.5px;color:var(--dim);font-family:var(--mono);margin-bottom:7px}
+#reg select,#reg input[type=number]{background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:5px 7px;font-family:var(--mono);font-size:11.5px;max-width:148px}
+#reg input[type=range]{accent-color:var(--orange);width:110px}
+#reg .val{color:var(--orange2);min-width:38px;text-align:right;font-size:11px}
+
+/* ---------- evenement ---------- */
+#event{position:absolute;top:16px;left:50%;transform:translate(-50%,-14px);display:none;
+  align-items:center;gap:13px;z-index:6;
+  background:rgba(18,22,31,.96);border:1px solid var(--line);border-left:4px solid var(--sharingan);
+  border-radius:11px;padding:11px 15px;font-size:13px;
+  box-shadow:0 16px 50px rgba(0,0,0,.7);white-space:nowrap}
+#event.on{display:flex;animation:pop .2s ease-out}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-24px)}to{opacity:1;transform:translate(-50%,-14px)}}
+#event button{background:var(--plate);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+  padding:6px 13px;font-family:var(--ui);font-size:12px;font-weight:600;cursor:pointer}
+#evYes{border-color:var(--orange)!important;color:var(--orange2)!important}
+#event button:hover{background:var(--plate2)}
+
+/* ---------- journal (parchemin) ---------- */
+#log{position:absolute;left:12px;bottom:12px;max-width:56%;pointer-events:none;
+  font-family:var(--mono);font-size:11px;line-height:1.75;color:#4a3c22}
+#log{color:#4a3c22}
+#log div{background:linear-gradient(90deg,var(--parch) 0%,var(--parch2) 100%);
+  border-left:3px solid var(--orange);border-radius:0 5px 5px 0;
+  padding:2px 9px;margin-top:3px;display:inline-block;
+  box-shadow:0 2px 8px rgba(0,0,0,.4)}
+
+/* ---------- telechargement du cerveau ---------- */
+#pull{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;z-index:7;
+  background:rgba(16,20,29,.98);border:1px solid var(--line);border-top:3px solid var(--orange);
+  border-radius:12px;padding:20px 28px;font-family:var(--mono);font-size:12.5px;line-height:1.7;
+  box-shadow:0 22px 70px rgba(0,0,0,.8);min-width:350px;text-align:center;white-space:pre-line}
+#pull.on{display:block}
+#pullTrack{margin-top:12px;height:6px;background:var(--plate);border-radius:4px;overflow:hidden}
+#pullBar{height:100%;width:0%;background:linear-gradient(90deg,var(--orange),var(--orange2));transition:width .3s}
+
+/* ---------- bas ---------- */
+#legend{display:none;max-width:1000px;font-family:var(--mono);font-size:11.5px;
+  color:var(--dim);text-align:center;line-height:1.9}
+#legend.on{display:block}
+#legend b{color:var(--orange2)}
+#help{max-width:1000px;font-family:var(--mono);font-size:11px;color:#657084;text-align:center;line-height:1.8}
+#help b{color:var(--txt)}
+
+/* ---------- bandeau des ninjas ---------- */
+#roster{width:100%;max-width:1000px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+  background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:8px}
+.nin{position:relative;width:46px;height:46px;border-radius:9px;cursor:pointer;
+  background:var(--plate);border:1px solid var(--line);overflow:hidden;transition:.12s;
+  display:flex;align-items:flex-end;justify-content:center}
+.nin img{width:100%;height:100%;image-rendering:pixelated;display:block}
+.nin:hover{border-color:var(--orange);transform:translateY(-2px)}
+.nin.off{filter:grayscale(1) brightness(.42);opacity:.6}
+.nin.off:hover{opacity:.9}
+.nin.sel{border-color:var(--orange2);box-shadow:0 0 0 2px var(--orange) inset}
+.nin em{position:absolute;bottom:0;left:0;right:0;font-style:normal;font-family:var(--mono);
+  font-size:8px;text-align:center;background:rgba(10,13,20,.82);color:var(--txt);
+  padding:1px 0;letter-spacing:.2px}
+.nin.ko{border-color:var(--sharingan)}
+
+/* ---------- fiche perso ---------- */
+#fiche{position:absolute;top:12px;left:12px;width:290px;display:none;z-index:6;
+  background:rgba(16,20,29,.97);border:1px solid var(--line);border-top:3px solid var(--orange);
+  border-radius:12px;padding:13px;box-shadow:0 24px 70px rgba(0,0,0,.75);backdrop-filter:blur(4px);
+  max-height:calc(100% - 24px);overflow-y:auto;font-family:var(--mono);font-size:11px}
+#fiche.on{display:block}
+#fiche::-webkit-scrollbar{width:5px}
+#fiche::-webkit-scrollbar-thumb{background:var(--plate2);border-radius:4px}
+#ficheX{position:absolute;top:8px;right:9px;background:none;border:0;color:var(--dim);
+  font-size:14px;cursor:pointer;line-height:1;padding:2px 4px}
+#ficheX:hover{color:var(--orange)}
+#fTete{display:flex;gap:11px;align-items:center;margin-bottom:11px}
+#fImg{width:52px;height:52px;image-rendering:pixelated;background:var(--plate);
+  border:1px solid var(--line);border-radius:9px}
+#fNom{font-family:var(--titre);font-size:15px;letter-spacing:.8px;color:var(--txt);text-transform:uppercase}
+#fCamp{font-size:10px;color:var(--dim);margin-top:2px;line-height:1.4}
+.jauge{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:10px;color:var(--dim)}
+.jauge span{width:42px}
+.jauge .tr{flex:1;height:6px;background:var(--plate);border-radius:4px;overflow:hidden}
+.jauge i{display:block;height:100%;width:0%;background:var(--leaf);transition:width .2s}
+.jauge b{width:52px;text-align:right;color:var(--txt);font-weight:400;font-size:10px}
+#fiche h5{font-family:var(--titre);font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--orange);margin:13px 0 6px;font-weight:400;border-bottom:1px solid var(--line);padding-bottom:4px}
+#fFait{color:var(--txt);line-height:1.6}
+#fPense .r{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+#fPense .r u{width:66px;text-decoration:none;color:var(--txt)}
+#fPense .r .tr{flex:1;height:5px;background:var(--plate);border-radius:3px;overflow:hidden;position:relative}
+#fPense .r .tr i{position:absolute;top:0;height:100%;display:block}
+#fPense .r s{width:34px;text-align:right;text-decoration:none;color:var(--dim);font-size:10px}
+#fMem div{color:var(--dim);line-height:1.65}
+#fTech .t{display:flex;justify-content:space-between;gap:6px;padding:2px 0;color:var(--dim);
+  border-bottom:1px dotted #2a3140}
+#fTech .t u{text-decoration:none;color:var(--txt)}
+#fTech .t.pret u{color:var(--orange2)}
+#fPoss{width:100%;margin-top:13px;background:var(--orange);border-color:var(--orange2);color:#12161d}
+#fPoss:hover{background:var(--orange2)}

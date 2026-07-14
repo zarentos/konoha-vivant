@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konoha Vivant</title>
+<link rel="stylesheet" href="world.css">
+</head>
+<body>
+<div id="wrap">
+
+  <div id="top">
+    <div id="titre">Konoha <b>Vivant</b></div>
+    <span id="iaState" class="ia">IA : …</span>
+    <a href="index.html" id="lien">atelier →</a>
+  </div>
+
+  <div id="stage">
+    <canvas id="world" width="1000" height="560"></canvas>
+
+    <div id="event">
+      <span id="eventTxt"></span>
+      <button id="evYes">Regarder</button>
+      <button id="evNo">Ignorer</button>
+    </div>
+
+    <div id="pull">
+      <span id="pullTxt">Téléchargement du cerveau…</span>
+      <div id="pullTrack"><div id="pullBar"></div></div>
+    </div>
+
+    <div id="reg">
+      <h4>Le monde</h4>
+      <label>Décor
+        <select id="decor">
+          <option value="Training Field.png">Training Field</option>
+          <option value="Uchiha Hideout.png">Uchiha Hideout</option>
+          <option value="Rocks night.png">Rocks night</option>
+          <option value="Suigetsu Stage.png">Suigetsu Stage</option>
+          <option value="Rocks day.png">Rocks day</option>
+        </select>
+      </label>
+      <label>Relations
+        <select id="depart">
+          <option value="tiedes">Tièdes</option>
+          <option value="canon">Canon</option>
+          <option value="neutres">Neutres</option>
+        </select>
+      </label>
+      <label>Tension
+        <input id="tension" type="range" min="0" max="3" step="0.1" value="1">
+        <span class="val" id="tensionVal">1.0×</span>
+      </label>
+      <label>Alertes
+        <select id="alert">
+          <option value="pause">Figer le monde</option>
+          <option value="auto">Sans figer</option>
+          <option value="off">Aucune</option>
+        </select>
+      </label>
+
+      <h4>Rendu</h4>
+      <label>Ligne de sol
+        <input id="sol" type="range" min="0.60" max="1" step="0.005" value="0.955">
+        <span class="val" id="solVal">0.955</span>
+      </label>
+    </div>
+
+    <div id="fiche">
+      <button id="ficheX">✕</button>
+      <div id="fTete">
+        <img id="fImg" alt="">
+        <div>
+          <div id="fNom">—</div>
+          <div id="fCamp">—</div>
+        </div>
+      </div>
+      <div class="jauge"><span>PV</span><div class="tr"><i id="fPv"></i></div><b id="fPvN">—</b></div>
+      <div class="jauge"><span>Chakra</span><div class="tr"><i id="fCk"></i></div><b id="fCkN">—</b></div>
+      <h5>Ce qu'il fait</h5>      <div id="fFait">—</div>
+      <h5>Ce qu'il pense</h5>     <div id="fPense">—</div>
+      <h5>Ce dont il se souvient</h5><div id="fMem">—</div>
+      <h5>Ses techniques</h5>     <div id="fTech">—</div>
+      <button id="fPoss" class="btn">Prendre le contrôle</button>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <div id="roster"></div>
+
+  <div id="bar">
+    <button id="pause" class="btn">⏸ Pause</button>
+    <div class="fld">Vitesse
+      <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1">
+      <b id="speedVal">1.0×</b>
+    </div>
+    <div class="sep"></div>
+    <button id="mute" class="btn">🔊</button>
+    <div class="fld">Son
+      <input id="volume" type="range" min="0" max="1" step="0.05" value="0.7">
+    </div>
+    <div class="sep"></div>
+    <button id="follow" class="btn on">Suivre l'action</button>
+    <button id="wide" class="btn">Vue large</button>
+    <div class="grow"></div>
+    <button id="reset" class="btn">↻ Nouveau monde</button>
+    <button id="cog" class="btn">⚙ Réglages</button>
+  </div>
+
+  <div id="legend"></div>
+  <div id="help">
+    Les ninjas vivent seuls. Le bandeau du bas dit qui est là ·
+    <b>glisser</b> pour déplacer la caméra · <b>molette</b> pour zoomer ·
+    <b>clic</b> sur un ninja pour sa fiche · <b>F</b> vue large · <b>D</b> diagnostic · <b>Espace</b> pause
+  </div>
+
+</div>
+
+<script src="data/naruto.js"></script>
+<script src="data/sasuke.js"></script>
+<script src="data/itachi.js"></script>
+<script src="data/sakura.js"></script>
+<script src="data/kakashi.js"></script>
+<script src="data/jiraiya.js"></script>
+<script src="data/orochimaru.js"></script>
+<script src="data/pain.js"></script>
+<script src="data/deidara.js"></script>
+<script src="data/konan.js"></script>
+<script src="data/sai.js"></script>
+<script src="data/shikamaru.js"></script>
+<script src="data/suigetsu.js"></script>
+<script src="data/karin.js"></script>
+<script src="data/jugo.js"></script>
+<script src="data/moves.js"></script>
+<script src="data/social.js"></script>
+<script src="data/sons.js"></script>
+<script src="audio.js"></script>
+<script src="world.js"></script>
+<script src="mind.js"></script>
+</body>
+</html>

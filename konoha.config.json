@@ -1,0 +1,16 @@
+{
+  "_lisez_moi": "Laisse tout en 'auto'. Le jeu embarque son propre moteur d'IA : il choisit le modele selon la RAM de la machine et le telecharge tout seul au premier lancement. Aucune installation. Les cles API ne servent que si tu veux passer par internet a la place.",
+
+  "moteur": "auto",
+  "modele": "auto",
+
+  "modeles": {
+    "petit": { "uri": "hf:Qwen/Qwen3-1.7B-GGUF:Q4_K_M", "nom": "Qwen3 1.7B", "go": 1.2 },
+    "moyen": { "uri": "hf:Qwen/Qwen3-4B-GGUF:Q4_K_M",   "nom": "Qwen3 4B",   "go": 2.6 },
+    "grand": { "uri": "hf:Qwen/Qwen3-8B-GGUF:Q4_K_M",   "nom": "Qwen3 8B",   "go": 5.1 }
+  },
+
+  "ollama": { "url": "http://localhost:11434", "model": "qwen3:4b" },
+  "groq":   { "cle": "", "model": "llama-3.3-70b-versatile" },
+  "gemini": { "cle": "", "model": "gemini-2.5-flash" }
+}

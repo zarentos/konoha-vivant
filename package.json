@@ -19,14 +19,41 @@
     "files": [
       "main.js",
       "preload.js",
+      "konoha.config.json",
       "src/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/@node-llama-cpp/*-cuda*/**",
+      "!node_modules/**/*.{md,map,ts}",
+      "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
     ],
-    "directories": { "output": "dist" },
-    "win": { "target": "nsis", "artifactName": "KonohaVivant-Setup-${version}.${ext}" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "mac": { "target": "dmg", "identity": null, "category": "public.app-category.games",
-             "artifactName": "KonohaVivant-${version}.${ext}" },
-    "linux": { "target": "AppImage" }
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "artifactName": "KonohaVivant-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": "dmg",
+      "identity": null,
+      "category": "public.app-category.games",
+      "artifactName": "KonohaVivant-${version}.${ext}"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "asarUnpack": [
+      "node_modules/node-llama-cpp/**",
+      "node_modules/@node-llama-cpp/**"
+    ],
+    "npmRebuild": false
+  },
+  "dependencies": {
+    "node-llama-cpp": "^3.19.0"
   }
 }

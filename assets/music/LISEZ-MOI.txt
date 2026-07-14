@@ -1,0 +1,5 @@
+Depose ici les pistes de Soundtrack.rar (extrait depuis le repo naruto-test).
+Formats acceptes : .ogg .mp3 .wav .m4a .flac
+
+Le jeu liste ce dossier tout seul au demarrage et enchaine les pistes au hasard,
+en fond, a volume reduit. Rien a declarer nulle part.
