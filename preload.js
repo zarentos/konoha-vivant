@@ -7,5 +7,7 @@ contextBridge.exposeInMainWorld("KV_BRIDGE", {
   llm:    payload => ipcRenderer.invoke("kv-llm", payload),
   // progression du telechargement du modele
   onPull: cb      => ipcRenderer.on("kv-pull", (_e, data) => cb(data)),
-  musique: ()     => ipcRenderer.invoke("kv-musique")
+  musique: ()     => ipcRenderer.invoke("kv-musique"),
+  // le texte du LLM arrive au fur et a mesure qu'il est ecrit
+  onChunk: cb     => ipcRenderer.on("kv-llm-chunk", (_e, data) => cb(data))
 });

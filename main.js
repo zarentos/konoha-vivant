@@ -66,6 +66,27 @@ const SCHEMAS = {
     properties: { lignes: { type: "array", items: { type: "string" } } },
     required: ["lignes"]
   },
+  // La REACTION : le modele COMPOSE lui-meme une suite de gestes elementaires.
+  // Il n'y a pas de menu de comportements — juste une grammaire.
+  reaction: {
+    type: "object",
+    properties: {
+      suite: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            quoi:  { enum: ["aller_vers","s_eloigner","s_arreter","regarder","suivre",
+                            "geste","dire","attendre","provoquer","toucher","soigner"] },
+            cible: { type: "string" },
+            texte: { type: "string" }
+          },
+          required: ["quoi"]
+        }
+      }
+    },
+    required: ["suite"]
+  },
   actions: {
     type: "object",
     properties: {
@@ -135,7 +156,7 @@ async function localInit(win) {
 
     dire({ pct: 100, status: "Chargement du cerveau…" });
     MODEL   = await LLAMA.loadModel({ modelPath });
-    CTX     = await MODEL.createContext({ contextSize: 4096, sequences: 1 });
+    CTX     = await MODEL.createContext({ contextSize: 2048, sequences: 1 });   // nos prompts font <900 tokens
     SESSION = new LC.LlamaChatSession({ contextSequence: CTX.getSequence() });
 
     const acc = (LLAMA.gpu && LLAMA.gpu !== false) ? LLAMA.gpu.toUpperCase() : "CPU";
@@ -152,7 +173,11 @@ async function localInit(win) {
   }
 }
 
-async function localAsk(prompt, schema) {
+// Combien de tokens au maximum, selon ce qu'on demande. C'est LE reglage qui decide
+// du temps de reponse : un dialogue de 6 repliques courtes fait ~160 tokens, pas 620.
+const PLAFOND = { dialogue: 260, repliques: 340, actions: 220, reaction: 190 };
+
+async function localAsk(prompt, schema, envoiChunk) {
   const run = file.then(async () => {
     SESSION.resetChatHistory();
     const g = await grammaire(schema);
@@ -161,7 +186,10 @@ async function localAsk(prompt, schema) {
       temperature: 1.0,       // on veut de la variete, pas la meme phrase a chaque fois
       topP: 0.95,
       repeatPenalty: { penalty: 1.15, frequencyPenalty: 0.35, presencePenalty: 0.35 },
-      maxTokens: 620
+      maxTokens: PLAFOND[schema] || 300,
+      // STREAMING : chaque morceau part vers le jeu des qu'il est produit.
+      // La 1re replique s'affiche apres ~30 tokens au lieu d'attendre les ~160 de tout le bloc.
+      onTextChunk: envoiChunk || undefined
     });
   });
   file = run.then(() => {}, () => {});
@@ -192,7 +220,7 @@ async function ollamaAsk(model, prompt) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, prompt, stream: false, format: "json",
-                           options: { temperature: 0.9, num_predict: 480 } })
+                           options: { temperature: 1.0, num_predict: 280, top_p: 0.95 } })
   }, 60000);
   const j = await r.json();
   return j.response || "";
@@ -295,8 +323,18 @@ ipcMain.handle("kv-llm", async (e, payload) => {
   if (!PICK) throw new Error("aucun backend");
   const prompt = String((payload && payload.prompt) || "");
   const schema = (payload && payload.schema) || null;
+  const flux   = (payload && payload.flux) || null;   // identifiant de flux, si le jeu veut du direct
   let text = "";
-  if      (PICK.kind === "local")  text = await localAsk(prompt, schema);
+
+  let envoiChunk = null;
+  if (flux) {
+    const wc = e.sender;
+    envoiChunk = (morceau) => {
+      try { wc.send("kv-llm-chunk", { flux, t: morceau }); } catch (err) {}
+    };
+  }
+
+  if      (PICK.kind === "local")  text = await localAsk(prompt, schema, envoiChunk);
   else if (PICK.kind === "ollama") text = await ollamaAsk(PICK.model, prompt);
   else if (PICK.kind === "groq")   text = await groqAsk(prompt);
   else if (PICK.kind === "gemini") text = await geminiAsk(prompt);

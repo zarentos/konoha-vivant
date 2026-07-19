@@ -13,6 +13,8 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +23,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install deps
         run: npm install
@@ -32,12 +35,43 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # VERIFICATION : le moteur LLM doit etre DEPAQUETE hors de l'asar, avec son binaire natif.
+      # Sans ca, l'appli se lance mais l'IA ne demarre jamais — et on ne s'en apercoit qu'apres
+      # l'avoir distribuee. Si ce test echoue, le build echoue. C'est voulu.
+      - name: Verifier que le moteur d'IA est bien embarque
+        shell: bash
+        run: |
+          echo "--- recherche du moteur depaquete ---"
+          UNPACKED=$(find dist -type d -name "app.asar.unpacked" | head -n 1)
+          if [ -z "$UNPACKED" ]; then
+            echo "ECHEC : aucun dossier app.asar.unpacked. asarUnpack n'a pas fonctionne."
+            exit 1
+          fi
+          echo "trouve : $UNPACKED"
+
+          if [ ! -d "$UNPACKED/node_modules/node-llama-cpp" ]; then
+            echo "ECHEC : node-llama-cpp absent du dossier depaquete."
+            exit 1
+          fi
+
+          NATIF=$(find "$UNPACKED" -name "llama-addon.node" | head -n 1)
+          if [ -z "$NATIF" ]; then
+            echo "ECHEC : aucun binaire natif llama-addon.node. L'IA ne demarrera pas."
+            exit 1
+          fi
+          echo "binaire natif : $NATIF"
+
+          if find "$UNPACKED" -type d -name "*-cuda*" | grep -q .; then
+            echo "ATTENTION : CUDA embarque (+550 Mo pour rien). Verifier l'exclusion."
+          fi
+
+          echo "OK — le moteur d'IA est correctement embarque."
+
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
           name: KonohaVivant-${{ matrix.os }}
-          if-no-files-found: warn
+          if-no-files-found: error
           path: |
             dist/*.exe
             dist/*.dmg
-            dist/*.AppImage

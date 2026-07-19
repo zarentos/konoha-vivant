@@ -380,7 +380,7 @@ konoha-vivant/
    └─ data/
       ├─ <perso>.js  ×15   frames de chaque animation
       ├─ moves.js          ★ ce que font les techniques
-      ├─ social.js         ★ qui aime / déteste qui
+      ├─ social.js         ★ qui aime / déteste qui (458 répliques à la main)
       └─ sons.js           ★ les voix, classées par durée
 ```
 
@@ -388,6 +388,323 @@ konoha-vivant/
 `assets/J363go.png` (doublon de `Jugo.png`), `src/game.*` si tu veux faire le ménage.
 
 ---
+
+## ✅ PHASE 5 — TERMINÉE : la vie autonome
+
+### Les besoins — le vrai moteur
+Trois jauges qui montent toutes seules (`faim`, `fatigue`, `ennui`) et qu'il faut satisfaire.
+C'est ce qui les fait **bouger d'eux-mêmes**, indépendamment des relations.
+- **5 lieux** posés sur la carte (`LIEUX`) : 🍜 Ichiraku, 💤 Sous le saule, 🎯 Les poteaux,
+  🍡 L'échoppe, 🌳 Le grand arbre. Quand un besoin crie, le ninja **va au bon endroit** :
+  il mange, il **s'allonge et dort** (rendu avec l'anim `downed`, +25 % PV au réveil), ou il
+  **s'entraîne** (il enchaîne des combos tout seul).
+- **L'humeur** = 100 − moyenne des trois besoins. De mauvaise humeur, il **cherche la bagarre** ;
+  de bonne humeur, il papote. Affichée dans la fiche (« en pleine forme » → « au bout du rouleau »).
+
+### Le cycle jour / nuit
+20 min réelles = 24 h. Une **horloge** en haut à gauche, et la **lumière change** : aube orangée,
+plein jour, crépuscule violet, **nuit bleu nuit**. La nuit, ils tombent de sommeil et se battent
+beaucoup moins (`nuit()` pèse sur tout). Le prompt du LLM reçoit le moment de la journée.
+
+### La chronique
+Bouton **📜 Chronique** : le journal complet et horodaté de leur vie, qu'on fait défiler.
+*« 23:14 — Shikamaru s'endort — Sous le saule. »* · *« 09:02 — Sakura a repoussé Naruto. »*
+200 événements gardés.
+
+### Ce que la fiche montre en plus
+Les **3 jauges de besoins** (🍜 💤 🎯), l'**humeur**, et « ce qu'il fait » devient précis :
+*« Il dort — Sous le saule »*, *« Il va vers Ichiraku 🍜 »*, *« Il s'entraîne »*.
+
+La banque de répliques écrites à la main passe à **458** (situations `faim`, `fatigue`, `ennui`
+ajoutées), et la réserve du LLM fabrique aussi ces trois humeurs.
+
+**Bug corrigé :** un ninja tiré dans un duel pendant qu'il mangeait gardait son minuteur de
+repas, qui le remettait en « balade » en plein combat → duel bloqué (un combat montait à
+382 s). Un duel efface maintenant ce qu'il faisait, et un besoin ne peut plus sortir quelqu'un
+d'un combat.
+
+## ✅ COHÉRENCE — texte et actes racontent la même chose
+
+Le problème signalé : *« Naruto prépare un mauvais coup »* puis il dit « je vais manger des
+nouilles », ou il annonce une blague et lâche un vrai coup de poing. Corrigé sur trois plans.
+
+### Le LLM sait comment la scène finit
+Avant, il écrivait un dialogue « dans le vide », sans savoir quel acte suivait. Maintenant son
+prompt contient **`quoi` + `fin`** : ce qui se passe ET comment ça se termine (accepté/refusé
+pour l'amour, la farce qui réussit, le duel qui se lance…). Le dialogue doit **mener à cette
+fin**. La dernière réplique correspond exactement à l'acte joué.
+
+### Les scripts de secours collent à l'acte
+Réécrits (sans LLM, ce sont eux qui jouent). La **bêtise** n'est plus un coup de poing déguisé :
+le dernier mot de l'auteur EST le moment où il piège, la victime râle sans être blessée.
+L'**amour** a deux variantes (`amour_oui` / `amour_non`) choisies selon la relation réelle.
+
+### La bêtise est enfin une farce
+`acteRite` pour la bêtise : petit coup en douce (recul de 70 au lieu de 140), étincelle jaune
+légère, **aucune perte de PV réelle**, l'auteur se marre. Ce n'est plus une agression.
+
+### Les dialogues ordinaires ont un passé
+Le LLM reçoit maintenant **l'historique croisé** entre les personnages présents (`entreEux()` :
+« Pain a mis Naruto K.O. », « Sakura a soigné Kakashi »… puisés dans leur mémoire, < 2 min),
+plus le **moment de la journée**. Et une consigne d'enchaînement : chaque réplique répond à la
+précédente, pas de phrases jetées en l'air. Résultat : des échanges qui ressemblent à de vraies
+conversations, différents à chaque fois grâce à la réserve.
+
+### Anti-répétition renforcé
+La réserve ne remet plus en pile une réplique que le perso vient de dire (`g.dits`), et le LLM
+reçoit la liste de ce qu'il a déjà dit avec « trouve VRAIMENT autre chose ».
+
+## ✅ COMMUNICATION — le LLM a enfin la priorité
+
+Le problème signalé : *« si cette phrase est dite, la réponse sera toujours celle-ci »* — donc
+un effet scripté. La cause était mécanique : le LLM (8B sur le PC) met 4-8 s à écrire, mais le
+**script de secours en dur** sortait dès 1,2 s. On voyait donc presque toujours les mêmes 2-3
+variantes pré-écrites, jamais le dialogue unique du LLM.
+
+Corrigé : **le dialogue attend le LLM** (`grp.attenteLLM` : ~2,6 s pour une conversation,
+~3,5 s pour une scène). Tant qu'il n'a pas répondu, silence (ils se rejoignent, se regardent).
+Le script en dur ne sort **que** s'il tarde vraiment trop — c'est un filet de dernier recours,
+plus le cas normal. Et le LLM peut **prendre le relais même en cours de dialogue**
+(`setScript` greffe la suite sans répéter ce qui est déjà affiché).
+
+Le **prompt de conversation** est refondu pour de vrais échanges : chaque réplique répond à la
+précédente, la réaction dépend de QUI répond et de ce qu'il pense de l'autre (le même mot ne
+provoque pas la même réponse chez tous), chacun garde sa voix, zéro banalité creuse. 24 angles
+de départ (au lieu de 16), et la consigne que la conversation PEUT dérailler comme une vraie.
+
+## ✅ L'ATTENTE DU LLM — supprimée, pas masquée
+
+Idée de Raph, meilleure que la précédente : **le texte s'écrit lettre par lettre**. Ce temps
+n'est pas perdu, c'est le temps de réflexion du LLM. Quatre mesures qui se cumulent :
+
+**1. Frappe caractère par caractère** (~26 ms/lettre, curseur orange clignotant). La bulle
+garde sa **taille finale** dès le départ (pas de tremblement). Durée de vie proportionnelle à
+la longueur. Une conversation de 5 répliques gagne ainsi **~12 s de marge**.
+
+**2. On attend le LLM AVANT le premier mot** (6 s pour une conversation, 7 s pour une scène).
+Plus jamais de phrase de secours affichée puis remplacée : `setScript` refuse de réécrire un
+dialogue déjà LLM (`grp.fromLLM`). Pendant l'attente, ils **se tournent l'un vers l'autre et se
+rejoignent** — ça se lit comme deux personnes qui s'apprêtent à parler, pas comme un bug.
+
+**3. LLM accéléré** — c'était le vrai goulot :
+
+| | avant | après |
+|---|---|---|
+| `maxTokens` dialogue | 620 | **260** |
+| `contextSize` | 4096 | **2048** |
+| Ollama `num_predict` | 480 | **280** |
+
+Un dialogue de 6 répliques fait ~160 tokens réels. Sur un 8B GPU (~30 tok/s) : **~5 s au lieu
+de 20 s** dans le pire cas.
+
+**4. Anticipation** (`prechauffe`) : quand deux ninjas se rapprochent (60-260 px), le LLM
+**commence à écrire avant** qu'ils ne se parlent. Quand ils s'arrêtent, le dialogue est déjà
+prêt → **zéro attente**. Réservé au mode local (en ligne, le quota est trop précieux).
+
+## ✅ LE FLUX — la première réplique s'affiche pendant que le LLM écrit la suite
+
+Idée de Raph : ne pas attendre que tout le dialogue soit écrit. **Streaming de bout en bout.**
+- `main.js` : `onTextChunk` renvoie chaque morceau au jeu via `kv-llm-chunk` dès sa production.
+- `mind.js` : une regex extrait chaque `{"qui":…,"dit":…}` **complet** du JSON encore en cours,
+  et l'envoie immédiatement au monde (`W.pushLine`).
+- `world.js` : `pushLine()` démarre la conversation **dès la première réplique** et ajoute les
+  suivantes au fil de l'eau. Le dialogue ne se conclut qu'après 2,2 s sans nouvelle réplique.
+
+Mesuré : la 1ʳᵉ réplique est disponible à **38 % de la génération** → ~1,9 s au lieu de 5 s.
+Et comme le jeu la joue en ~2 s (frappe + lecture), la 2ᵉ est déjà arrivée. Le tuyau ne se vide
+jamais : **le LLM écrit pendant qu'on lit.**
+
+**Bug corrigé :** le compteur d'attente de fin de flux s'incrémentait 8× trop lentement (on
+ajoutait un `dt` de frame alors qu'on ne passe dans ce code qu'une fois toutes les 200 ms) →
+les scènes attendaient 30 s au lieu de 2,5 et rataient leur acte. Mesuré sur `worldT` désormais.
+
+### La tête ne dort jamais
+`KV_MIND.tick` était appelé **dans** `step()`, donc bloqué en pause. Il est maintenant appelé
+depuis la boucle principale avec le temps réel : **le LLM continue de réfléchir en pause,
+pendant une scène, pendant une alerte.** Ce temps d'arrêt devient du temps d'avance.
+
+## ⚙️ CE QUI N'A **PAS** BESOIN D'ÊTRE OPTIMISÉ (mesuré)
+15 minutes de monde simulées = **5 s de CPU**, soit **93 µs par frame** sur un budget de
+16 666 µs → la simulation occupe **0,56 %**. Ralentir les ninjas hors écran n'apporterait rien
+et risquerait de casser leur comportement. **Non fait, volontairement.**
+Seul ajout gratuit : on ne **dessine** plus les agents hors champ (leur simulation, elle,
+continue à l'identique — rien ne se voit au dézoom).
+
+## ✅ PLUS DE VIE — il se passe des choses
+
+*« Même avec tous les persos, j'ai l'impression qu'il ne se passe rien. »* Corrigé :
+- **Scènes ~2× plus fréquentes** : respiration entre scènes 13 s → 7 s, cooldown par perso
+  55-130 s → 30-70 s. Mesuré : 55 scènes / 15 min (avant : 28).
+- Les scènes les plus vivantes (bêtise, dispute, défi) montent en probabilité.
+- **Réactions visibles aux K.O.** : les témoins à l'écran se figent, se tournent vers la scène
+  et lâchent un mot — choqués pour un ami, ravis pour un ennemi. Un K.O. ne passe plus inaperçu.
+- **Alerte sur les K.O. spectaculaires** (haine réciproque forte) — rare, pour ne pas saturer.
+
+## ✅ LA FORCE — le joueur existe dans leur monde
+
+Idée de Raph, et c'est la plus importante du projet : **le joueur n'est pas un spectateur
+invisible. C'est une PRÉSENCE que les ninjas perçoivent, subissent, et jugent.**
+
+### Tout commence à zéro
+`SOC.depart` est passé à **`"neutres"` par défaut** : personne ne connaît personne. Aucune
+relation n'est écrite d'avance. Deux parties ne se ressemblent pas.
+
+### Ils se font une opinion de toi
+Chaque ninja porte `opMain` (−100 terreur … +100 dévotion), qui commence à **0**.
+`forceAgit(gravité, cible, quoi)` fait juger l'acte par la victime **et par tous les témoins
+présents à l'écran** — et un témoin qui déteste la victime en tire la conclusion inverse.
+
+| Ce que tu fais | Effet |
+|---|---|
+| Le saisir | −0,35 (agaçant) |
+| Le lâcher de haut | **−0,85** |
+| Le reposer doucement | +0,12 |
+| Le jeter sur un ennemi | −0,70 (et −0,50 pour l'autre) |
+| Le poser près d'un ami | +0,45 |
+| Le prendre en contrôle | −0,50 (être habité, c'est troublant) |
+| **Le mener là où son besoin le réclame** | **+0,90** |
+| **Le sortir d'un combat qu'il perd** | **+1,00** |
+| **Le confier à quelqu'un qui peut le soigner** | **+1,00** |
+
+**Rendements décroissants** : plus un avis est tranché, plus il est dur de le pousser — mais
+un avis opposé se corrige 1,5× plus vite (on doute, puis on révise). Et sans manifestation
+pendant 25 s, l'opinion **s'estompe**. Une réputation se mérite, et se perd.
+
+Mesuré sur 15 minutes :
+
+| Style de joueur | Résultat |
+|---|---|
+| absent | indifférence ×15 |
+| il attrape de temps en temps | méfiance ×3, indifférence ×12 |
+| il les lâche de haut | **terreur ×14** |
+| il les pose près de leurs amis | curiosité ×13, fascination ×2 |
+| il s'occupe d'eux | **fascination ×11** |
+
+### ⚠️⚠️ LA TÊTE **COMPOSE**, ELLE NE CHOISIT PAS — `demandeReaction()`
+Deuxième correction de Raph, et elle va plus loin que la première : *« tu viens de me dire que
+leurs réactions sont prévues à l'avance et pas improvisées selon ce qu'ils ont envie de faire. »*
+Il avait raison — le **menu** de 11 réactions restait fermé.
+
+Désormais le LLM ne choisit plus un comportement : il **assemble une suite de gestes
+élémentaires**, comme on forme une phrase avec des mots. « Fuir » n'est plus une option qu'on
+lui propose : c'est ce qui ressort s'il enchaîne `s_eloigner` → `regarder` → `dire`.
+
+**Les 11 briques** (`P.jouerSuite`) : `aller_vers` · `s_eloigner` · `suivre` · `s_arreter` ·
+`regarder` · `geste` · `dire` · `attendre` · `provoquer` · `toucher` · `soigner`.
+
+Le prompt ne contient **aucune liste de comportements** : juste qui il est (caractère, état
+d'âme, ce qu'il pense de la Force, sa mémoire, ses besoins), ce qui vient de lui arriver, qui
+est autour, et la grammaire. Puis : *« Compose une suite de 2 à 4 gestes. Pas de comportement
+type : ce que LUI ferait. »*
+
+**L'ancien menu fermé d'intentions** (`but: parler|provoquer|venger|eviter|soigner|seul`) a été
+**supprimé**. `penser()` décrit maintenant le moment de vie du ninja et laisse composer.
+
+Mesuré sur 25 min : **158 réactions improvisées → 148 enchaînements différents.**
+
+**Limite honnête :** le vocabulaire *physique* est borné par le moteur. Un ninja ne peut pas
+grimper sur un toit ni construire un autel — il n'y a ni sprite ni physique pour ça. Ce qui est
+ouvert, c'est le **choix, la combinaison, l'ordre et le sens**. Pas l'inventaire des gestes.
+
+### Le filet : `P.reagirForce()` (quand la tête est absente ou occupée)
+Première version : une table (`peur → il fuit`). **Mauvaise approche**, et Raph l'a corrigée :
+*« pas du "il se passe ça donc il y a ça", mais une réaction propre à chacun, tirée d'énormément
+de données, qui fait qu'il peut réagir comme ceci ou comme cela pour exactement le même
+contexte. »*
+
+Refait sur le modèle de l'IA de combat (qui marche depuis le début, précisément pour ça).
+**11 réactions possibles**, chacune notée sur ~15 facteurs, puis **tirage proportionnel** :
+
+`fuir` · `reculer` · `cacher` (derrière un ami) · `figer` · `observer` · `approcher` ·
+`saluer` · `defier` · `chercher` (quelqu'un à qui en parler) · `proteger` (un plus faible) ·
+`ignorer`
+
+Facteurs pesés : opinion · état d'âme · les 3 traits · PV · humeur (besoins) · distance ·
+**contagion** (combien de voisins fuient ou vénèrent en ce moment) · son vécu personnel avec
+la Force (mémoire fraîche pondérée par l'âge) · nuit ou jour · depuis quand elle n'a rien fait ·
+présence d'un allié · présence d'un plus faible à protéger · et du hasard partout.
+
+**Aucun seuil dur.** Un fervent peut avoir peur. Un terrifié peut venir voir. Mesuré :
+
+| Opinion | Ce qu'ils font (500 tirages, Force venant d'agir) |
+|---|---|
+| terrifiés | fuir 26% · ignorer 23% · observer 19% · reculer 18% · **defier 7%** · chercher 5% |
+| méfiants | ignorer 44% · figer 20% · observer 15% · fuir 11% · reculer 9% |
+| indifférents | ignorer 56% · figer 31% · observer 13% |
+| fascinés | ignorer 37% · **approcher 22%** · saluer 15% · figer 14% |
+| en dévotion | approcher 34% · saluer 30% · **ignorer 25%** |
+
+Et **le même ninja**, 400 fois dans la même situation (Naruto terrifié) :
+fuir 32% · ignorer 25% · **defier 15%** · reculer 10% · chercher 9% · observer 8% · figer 2%.
+Naruto défie plus que la moyenne — parce qu'il est impulsif, pas parce que c'est écrit.
+
+### Trois nouvelles scènes, uniquement sur toi
+- 🤫 **le secret** — deux effrayés se confient à voix basse. *« Quelque chose nous attrape. »*
+  Et ça **propage la peur** (−10 pour l'autre).
+- 🙏 **le culte** — deux fervents parlent de la Présence qui veille. Ça **propage la foi** (+12).
+- ✊ **le défi** — un aigri terrifié provoque le vide. Rien ne répond. **Le silence le ronge**
+  (−8 d'opinion, −0,08 d'âme).
+- ❓ **la théorie** — ils cherchent à comprendre ce que tu es. Le LLM a carte blanche : un dieu,
+  un rêve, une punition, un enfant qui joue, ou l'idée qu'ils n'existent que pour être regardés.
+  **Aucune réponse n'est imposée**, et deux parties ne donneront pas les mêmes théories.
+  Leurs avis **convergent** de 30 % après en avoir parlé : les croyances se propagent.
+
+Le LLM reçoit tout ça : ils n'ont **aucun mot** pour te désigner — ni dieu ni démon, juste
+« la chose », « ça ».
+
+## ✅ L'ÉTAT D'ÂME — le même ninja n'est pas le même d'une partie à l'autre
+
+Second volet de l'idée de Raph. `P.ame` (−1 aigri … +1 serein) n'est **pas un trait** : c'est
+le **résultat** de ce qu'il a vécu. Calculé (`calculeAme`) à partir du climat de ses relations,
+du nombre d'amis et d'ennemis, du bilan coups/douceurs, de son avis sur la Force et de ses
+besoins. Il **dérive lentement** (6 % toutes les 2 s) : on n'aigrit pas quelqu'un en une minute.
+
+Et il **module tout** :
+- `ouverture()` → à quel point il peut encore s'attacher. Aigri : il se lie mal.
+- `aCran()` → à quel point il s'emporte. Aigri : il cherche la bagarre.
+
+### ⚠️ Le piège évité : la spirale
+Première version : après 30 min, **13 aigris sur 15, 24 inimitiés, 1 amitié**. Le monde ne
+pouvait QUE s'effondrer — chaque bagarre laissait une trace définitive et rien ne la réparait.
+Trois correctifs :
+1. **Le temps apaise.** Les relations non entretenues retombent vers 0, et **une rancune
+   s'oublie 3× plus vite qu'une amitié ne se refroidit**.
+2. **Le bon compte plus que le mauvais.** Discuter : +4,6 (au lieu de +3). Un combat amical
+   **rapproche** (+3/+7) au lieu d'éloigner.
+3. **On ne se bat pas avec un inconnu** sans raison (×0,22 si la relation est neutre).
+
+Puis un second problème : plus rien ne se passait. Cause réelle — avec 15 ninjas et des
+rencontres au hasard, **ils ne reparlaient jamais à la même personne**, donc aucune amitié ne
+pouvait se construire. Corrigé : ils **choisissent** leur interlocuteur (préférence pour ceux
+qu'ils apprécient) et **dérivent vers eux** en se baladant.
+
+Résultat mesuré à 25 min, en partant de zéro :
+**7 amitiés, 1 inimitié, des âmes de −0,37 à +0,63** (aigris, neutres, apaisés, sereins).
+Le monde se construit tout seul, **dans les deux sens**.
+
+## ✅ L'ENTRAÎNEMENT — la bonne réponse, trouvée en reculant
+
+**Leçon de méthode** (Raph : *« au lieu de trouver absolument une solution fixe, prends du
+recul »*). Le monde neutre s'endormait : la formule des bagarres est proportionnelle à la
+haine, donc à zéro quand personne ne déteste personne. **2 bagarres en 25 min.**
+
+Ma première réponse : fabriquer de l'hostilité artificielle (terme d'« incident »). Mauvaise
+piste — je m'acharnais sur *les bagarres* alors que le vrai besoin était *que les techniques
+servent et qu'il se passe quelque chose*.
+
+**La bonne réponse : l'entraînement.** Deux ninjas qui s'ennuient, sont en forme et
+s'apprécient (ou veulent se mesurer) s'entraînent ensemble. Un entraînement est **toujours**
+`niveau: "amical"` quelles que soient les relations : dégâts ×0,65, pas de technique lourde,
+arrêt à 32 % de PV, **aucun K.O.** Et à la fin : **+5 de relation des deux côtés, −45 d'ennui**.
+
+| | avant | après |
+|---|---|---|
+| Combats (25 min, sans IA) | 2 | **36** (dont 33 amicaux) |
+| Techniques utilisées | 25 % | **69 %** (76 % avec IA) |
+| K.O. | 1 | 3 |
+
+Ça résout tout d'un coup : les techniques servent, le monde est animé, et ça **rapproche** au
+lieu de diviser. C'est aussi ce qui colle le mieux à l'univers.
 
 ## ⚠️ LE CHANTIER ANIMATIONS — chiffré
 
@@ -404,30 +721,111 @@ Kakashi a même des anims `frog_idle` / `frog_move` (mode ermite) — des frames
 À faire : re-découper Kakashi et Saï en entier, avec la méthode de la phase 1
 (analyse au pixel → fiche PNG fond magenta → Raph valide → correction).
 
-## 🚧 PHASE 4 — À FAIRE
+## 🚧 CE QUI RESTE
 
-1. **Hand-tracking caméra** — MediaPipe (gratuit). Détecter les signes de main pour lancer
-   les jutsu du ninja possédé. La permission caméra est déjà autorisée dans `main.js`.
-2. **Packaging** — le workflow GitHub Actions existe déjà : push → onglet Actions →
-   artifacts `KonohaVivant-windows-latest` (.exe) et `KonohaVivant-macos-latest` (.dmg).
-3. **Pistes** : plusieurs zones/décors dans le même monde, cycle jour/nuit, faim/fatigue,
-   mémoire des PNJ (le journal en bas à gauche est déjà là).
+### En attente de Raph
+1. **Les animations** — il les répare lui-même dans `editor/`. Il renvoie `<perso>.js`,
+   `<perso>_anim.png` et surtout **`<perso>_control.json`** (avec lequel je règle les hitboxes
+   et repère les raccords qui sautent entre deux frames).
+2. **Le test des 5 décors** — touche `D`, la ligne rouge doit passer sous leurs pieds.
+   S'il y a un décalage : curseur **Sol** → me donner le chiffre.
+3. **Le visuel / les options** — il a dit qu'il donnerait sa liste après les gros problèmes.
+
+### À faire côté code
+4. **La caméra (MediaPipe)** — le gros morceau restant. Mains : pincer = attraper,
+   paume = soigner, poing = provoquer. Visage = ambiance. La permission caméra est déjà
+   autorisée dans `main.js`. À faire **après** les animations (choix de Raph).
+5. ~~Vérifier le packaging~~ ✅ **FAIT — le build fonctionne** (voir ci-dessous).
+6. **Décors** — en ajouter / en aligner. Reporté par Raph « en dernier ».
+
+### Petits restes connus
+- **Itachi** et **Konan** n'ont pas d'anim `win` (la pose de victoire est sautée) — sera réglé
+  par l'atelier d'animations.
+- **Kakashi** (427 poses, 5 techniques) et **Saï** (395 poses, 5 techniques) : la moitié de
+  leur planche n'a jamais été découpée. C'est LE chantier animations.
+
+---
+
+## ✅ LE PACKAGING — testé pour de vrai
+
+Build complet lancé en local (`npx electron-builder --linux dir`) puis **application lancée**
+sous écran virtuel. Résultat :
+
+| Étape | Résultat |
+|---|---|
+| `asarUnpack` sort node-llama-cpp de l'archive | ✔ |
+| Binaire natif `llama-addon.node` présent | ✔ |
+| L'appli démarre depuis le build | ✔ |
+| Config lue depuis l'asar | ✔ |
+| RAM détectée → choix du modèle | ✔ |
+| Vulkan tenté, repli CPU propre | ✔ |
+| Le moteur va jusqu'au téléchargement du modèle | ✔ (403 : HuggingFace bloqué dans le bac à sable, pas un bug) |
+| Repli en cerveau scripté sans planter | ✔ |
+
+**Le `.exe` fonctionnera.** C'était le dernier gros risque du projet.
+
+### Allègement (−40 Mo)
+- `llama/gitRelease.bundle` (**31 Mo**) : le code source de llama.cpp, inutile puisqu'on
+  utilise les binaires précompilés (`build: "never"`). → `node-llama-cpp` passe de 36 à 4,4 Mo.
+- Architectures ARM exclues sur Windows/Linux (gardées sur Mac pour Apple Silicon).
+- CUDA déjà exclu (−550 Mo).
+
+App décompressée : **400 Mo** (dont ~300 Mo d'Electron). L'installeur NSIS compresse fortement.
+
+### Garde-fou dans la CI
+`.github/workflows/build.yml` a maintenant une étape **« Vérifier que le moteur d'IA est bien
+embarqué »** : elle cherche `app.asar.unpacked`, `node-llama-cpp` et `llama-addon.node`, et
+**fait échouer le build** s'ils manquent. Sans ça, une future modif pourrait produire un `.exe`
+qui se lance mais sans IA — et on ne s'en apercevrait qu'après l'avoir distribué.
+
+⚠️ **Mac** : `macos-latest` sur GitHub est en Apple Silicon (arm64). Le `.dmg` produit ne
+tournera **pas** sur un Mac Intel. Si besoin, ajouter `macos-13` à la matrice.
 
 ---
 
 ## 🔄 Reprendre dans une nouvelle conversation
 
-Coller ce fichier, plus :
+👉 **Voir `REPRENDRE.md`** : il contient un prompt prêt à copier-coller qui donne à une nouvelle
+conversation tout le contexte nécessaire (le projet, mes préférences de travail, les méthodes de
+vérification, et ce qui reste à faire).
 
-> On bosse sur konoha-vivant (github.com/zarentos/konoha-vivant), un **monde Naruto autonome**
-> (pas un jeu de combat : les persos vivent seuls, on regarde).
-> Phases 1 et 2 finies : 15 persos animés, et le moteur de monde tourne
-> (`src/world.js` + `data/moves.js` + `data/social.js`).
-> Il y a un harnais de test : `node tools/simtest.js 12`.
-> Clone le repo pour voir l'état réel du code.
+### Carte du dépôt
+```
+konoha-vivant/
+├─ main.js               Electron + moteur LLM embarqué (node-llama-cpp) + repli Ollama/Groq/Gemini
+├─ preload.js            pont fenêtre ↔ Node (statut, LLM, flux de texte, musique)
+├─ konoha.config.json    tout en "auto" — ne rien toucher normalement
+├─ package.json          build electron-builder (asarUnpack, exclusions CUDA/ARM)
+├─ LANCER.bat / .command double-clic : installe puis lance
+├─ ETAT_DU_PROJET.md     CE FICHIER — l'état complet
+├─ REPRENDRE.md          le prompt de reprise
+├─ .github/workflows/    build.yml : .exe + .dmg, avec vérification que l'IA est embarquée
+├─ src/
+│  ├─ world.html/.css    l'interface (palette reprise de sharingan-cam)
+│  ├─ world.js           ★ LE MONDE : agents, combat, social, besoins, scènes, la Force
+│  ├─ mind.js            ★ LA TÊTE : réserve, dialogues, réactions composées (optionnelle)
+│  ├─ audio.js           voix ripées + bruitages synthétisés, volume suivant le zoom
+│  ├─ index.html         atelier de vérification des sprites
+│  └─ data/
+│     ├─ <15 persos>.js  animations : {r:[x,y,w,h], ax, orb, ofx, fx, proj, clones}
+│     ├─ moves.js        127 techniques : ce qu'elles FONT (dégâts, portée, coût, poids IA)
+│     ├─ social.js       camps, traits, 458 répliques écrites à la main, départ des relations
+│     └─ sons.js         320 voix classées par durée
+├─ editor/               ★ L'ATELIER D'ANIMATIONS (découpe, montage, réparation d'un .js)
+├─ tools/simtest.js      ★ LE HARNAIS DE TEST — `node tools/simtest.js 25`
+└─ assets/               planches, décors, portraits, sons/<perso>/, music/
+```
 
-**Méthode qui marche :**
-- Toucher au **visuel** → Claude analyse la planche au pixel, place les données, génère une
-  **fiche PNG** (fond magenta), Raph la renvoie, Claude corrige. Un aller-retour par perso.
-- Toucher à la **logique** → Claude modifie, lance `simtest.js`, et lit les chiffres.
-  Ne jamais livrer une modif de `moves.js`/`social.js` sans avoir relancé le test.
+### Les fichiers à connaître en priorité
+1. **`src/world.js`** — tout le moteur. C'est le gros morceau.
+2. **`src/mind.js`** — la couche LLM. Entièrement optionnelle.
+3. **`tools/simtest.js`** — la seule façon de vérifier qu'on n'a rien cassé.
+4. **`src/data/moves.js`** — l'équilibrage des techniques se fait là, pas ailleurs.
+
+### Les pièges déjà rencontrés (ne pas les refaire)
+- Un remplacement de texte qui échoue en silence : **vérifier que le motif existe**.
+- Une scène qui ment (annoncée mais rien ne se passe) : voir « UNE SCÈNE NE MENT JAMAIS ».
+- Le monde qui s'effondre en spirale négative : voir « Le piège évité ».
+- Le monde qui s'endort : voir « L'ENTRAÎNEMENT ».
+- Une table « situation → réaction » : voir « LA TÊTE COMPOSE ».
+- Un compteur alimenté par `dt` dans du code qui ne tourne pas à chaque frame.

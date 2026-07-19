@@ -53,6 +53,45 @@ var TENSION = 1;          // multiplicateur global d'agressivite (slider)
 
 var STRONG_DEF = {a:"strong", t:"melee", r:[0,100], d:12, cd:2600, ck:0, rc:74, kb:280, h:"heavy", w:2.2};
 
+/* ---- LE TEMPS ---- */
+var JOUR_MS = 20*60*1000;      // 20 minutes reelles = 24 h dans le monde
+var heure   = 9;               // on demarre le matin
+function nuit(){ return heure < 6 || heure >= 21; }
+function momentDuJour(){
+  if(heure < 6)  return "nuit";
+  if(heure < 8)  return "aube";
+  if(heure < 12) return "matin";
+  if(heure < 14) return "midi";
+  if(heure < 18) return "après-midi";
+  if(heure < 21) return "soir";
+  return "nuit";
+}
+function teinte(){
+  if(heure >= 6  && heure < 8)  return {c:"255,150,90",  a:.16};   // aube
+  if(heure >= 8  && heure < 17) return {c:"255,255,255", a:0};     // plein jour
+  if(heure >= 17 && heure < 19) return {c:"255,140,60",  a:.16};   // fin d'apres-midi
+  if(heure >= 19 && heure < 21) return {c:"120,90,180",  a:.26};   // crepuscule
+  return {c:"20,35,90", a:.52};                                    // nuit
+}
+
+/* ---- LES LIEUX : c'est ce qui donne une structure au village ---- */
+var LIEUX = [
+  {nom:"Ichiraku",     ic:"🍜", x: 340,  b:"faim"},
+  {nom:"Sous le saule",ic:"💤", x: 980,  b:"fatigue"},
+  {nom:"Les poteaux",  ic:"🎯", x: 1480, b:"ennui"},
+  {nom:"L'échoppe",    ic:"🍡", x: 1980, b:"faim"},
+  {nom:"Le grand arbre",ic:"🌳",x: 2480, b:"fatigue"}
+];
+function lieuPour(b, x){
+  var best=null, bd=1e9;
+  for(var i=0;i<LIEUX.length;i++){
+    if(LIEUX[i].b !== b) continue;
+    var d = Math.abs(LIEUX[i].x - x);
+    if(d < bd){ bd = d; best = LIEUX[i]; }
+  }
+  return best;
+}
+
 /* ---------------------------------------------------------------- utilitaires */
 function rand(a,b){ return a + Math.random()*(b-a); }
 function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
@@ -185,6 +224,19 @@ function Agent(key, x){
   this.parleT=rand(2500,12000);          // il pense a voix haute, tout le temps
   this.riteCd=rand(8000,40000);
   this.fait={};                          // les scenes deja jouees (on ne se declare pas 10 fois)
+  // CE QU'IL PENSE DE LA FORCE (le joueur). Personne ne commence avec un avis.
+  this.opMain = 0;                       // -100 terreur .. +100 devotion
+  this.ame = 0;                          // -1 aigri .. +1 serein — CE QUE LA VIE A FAIT DE LUI
+  this.coups = 0; this.douceurs = 0;     // ce qu'il a encaisse / recu de bon
+  this.memF = [];                        // ce que la Force lui a fait
+  this.peurT = 0;                        // temps restant de fuite devant la Force
+  this.reactF = null;                    // sa reaction actuelle a la Force (sert a la contagion)
+  this.seq = null; this.seqI = 0;        // suite de gestes composee par la tete
+  // LES BESOINS : le vrai moteur. Ils montent tout seuls et il faut y repondre.
+  this.faim    = rand(0, 45);
+  this.fatigue = rand(0, 40);
+  this.ennui   = rand(0, 50);
+  this.lieu=null; this.faisant=null; this.besoinT=0;
 
   this.recent=[];              // les 4 dernieres techniques : on ne se repete pas
   this.mem=[];                 // journal : ce qui m'est arrive, en clair
@@ -211,6 +263,65 @@ P.pickAnim = function(list){
   var ok=[];
   for(var i=0;i<list.length;i++) if(this.has(list[i])) ok.push(list[i]);
   return ok.length ? pickOne(ok) : "idle";
+};
+/* L'ETAT D'AME.
+   Ce n'est pas un trait de caractere : c'est le RESULTAT de ce qu'il a vecu.
+   Le meme ninja, dans deux parties differentes, ne sera pas la meme personne.
+   Aigri : il se lie difficilement, il s'emporte vite, il voit le mal partout.
+   Serein : il s'ouvre, il pardonne, il cherche la compagnie.
+*/
+P.calculeAme = function(){
+  var i, n = 0, somme = 0, amis = 0, ennemis = 0;
+  for(i=0;i<agents.length;i++){
+    var o = agents[i];
+    if(o === this) continue;
+    var r = this.relTo(o);
+    somme += r; n++;
+    if(r > 35) amis++;
+    else if(r < -35) ennemis++;
+  }
+  var moy = n ? somme/n : 0;
+
+  var cible = 0;
+  cible += moy / 60;                                  // le climat general autour de lui
+  cible += Math.min(0.60, amis * 0.22);               // avoir des amis rassure BEAUCOUP
+  cible -= Math.min(0.45, ennemis * 0.11);            // etre entoure d'ennemis ronge
+  cible += (this.douceurs*1.5 - this.coups) * 0.035;  // le bilan de ce qu'il a subi
+  cible += (this.opMain/100) * 0.30;                  // ce qu'il pense de la Force compte
+  cible -= (100 - this.humeur()) / 220;               // faim, fatigue, ennui pesent aussi
+
+  return clamp(cible, -1, 1);
+};
+
+// combien il est capable de s'attacher, maintenant. Aigri : tres peu.
+P.ouverture = function(){ return 0.35 + 0.85 * (this.ame + 1) / 2; };
+// combien il est a cran. Aigri : beaucoup.
+P.aCran = function(){ return 1.35 - 0.7 * (this.ame + 1) / 2; };
+
+P.motAme = function(){
+  var a = this.ame;
+  if(a <= -0.55) return "aigri";
+  if(a <= -0.2)  return "sur ses gardes";
+  if(a <   0.2)  return "neutre";
+  if(a <   0.55) return "apaisé";
+  return "serein";
+};
+
+// il retient ce que la Force lui a fait
+P.memMain = function(quoi, gravite){
+  this.memF.unshift({t:worldT, k:quoi, g:gravite});
+  if(this.memF.length > 6) this.memF.pop();
+};
+// comment il voit la Force, en clair
+P.avisForce = function(){
+  var o = this.opMain || 0;
+  if(o <= -70) return "terreur";
+  if(o <= -30) return "peur";
+  if(o <= -10) return "mefiance";
+  if(o <   12) return "indifference";
+  if(o <   45) return "curiosite";
+  if(o <   75) return "fascination";
+  return "devotion";
 };
 P.remember = function(kind, who){
   this.mem.unshift({t:worldT, k:kind, w:who?who.key:null});
@@ -379,20 +490,48 @@ P.knockout = function(by){
   this.grudgeUp(by, 45);
   this.remember("ko_by", by);
   by.remember("ko_of", this);
+  this.coups += 2;
   logIt(by.name + " met " + this.name + " K.O.");
 
   // les proches encaissent : rancune, puis vengeance
+  var demi = W/(2*cam.z);
   for(var i=0;i<agents.length;i++){
     var f=agents[i];
     if(f===this || f===by) continue;
     if(f.mode==="ko") continue;
     f.remember("saw_ko", this);
-    if(f.relTo(this) > 55 && f.S.loyal > .5){
-      f.grudgeUp(by, 18 + 30*f.S.loyal);
-      // on ne charge pas tete baissee : la rancune mijote 10 a 35 s
-      if(!f.avenge && Math.random() < f.S.loyal*0.40)
-        f.avenge = {who:by, of:this, at: worldT + 10000 + Math.random()*25000};
+    var proche = f.relTo(this);
+    // reaction VISIBLE des temoins a l'ecran : ils se figent et lancent un mot
+    var visible = Math.abs(f.x - cam.x) < demi + 100;
+    if(visible && f.mode==="wander" && Math.random() < 0.5){
+      if(proche > 40)       f.dire("blesse", true);      // choqué pour un ami
+      else if(proche < -40) f.dire("content", true);     // ravi pour un ennemi
+      else                  f.dire("tendu", true);
+      f.facing = (this.x >= f.x) ? 1 : -1;               // il se tourne vers la scène
     }
+    if(proche > 55 && f.S.loyal > .5){
+      f.grudgeUp(by, 18 + 30*f.S.loyal);
+      if(!f.avenge && Math.random() < f.S.loyal*0.40)
+        f.avenge = {who:by, of:this, at: worldT + 8000 + Math.random()*18000};
+    }
+  }
+  // le temoin le plus concerne : la tete improvise sa reaction
+  if(window.KV_MIND && window.KV_MIND.reagit){
+    var meilleur = null, fort = 40;
+    for(i=0;i<agents.length;i++){
+      var t2 = agents[i];
+      if(t2===this || t2===by || t2.mode==="ko" || t2.duel) continue;
+      if(Math.abs(t2.x - this.x) > 380) continue;
+      var lien2 = Math.abs(t2.relTo(this));
+      if(lien2 > fort){ fort = lien2; meilleur = t2; }
+    }
+    if(meilleur) window.KV_MIND.reagit(meilleur,
+      "Sous ses yeux, " + by.name + " vient de mettre " + this.name + " à terre, inconscient.");
+  }
+
+  // un K.O. spectaculaire (haine reciproque forte) devient un evenement — mais rarement
+  if(by.relTo(this) < -55 && this.relTo(by) < -30 && !scene && Math.random() < 0.5){
+    raiseEvent("💥 " + by.name + " a terrassé " + this.name + " !", [by, this], null);
   }
   if(d) d.check();
 };
@@ -400,7 +539,8 @@ P.knockout = function(by){
 P.healedBy = function(h, amount){
   var self=this;
   this.hp = Math.min(this.maxHp, this.hp + amount);
-  this.rel[h.key] = clamp((this.rel[h.key]||0) + 22, -100, 100);
+  this.rel[h.key] = clamp((this.rel[h.key]||0) + 22*this.ouverture(), -100, 100);
+  this.douceurs += 2;
   spark(this.x, this.fy() - this.Ht*0.55, "#7dffb2", 1.2);
   if(AUD) AUD.voix(h, "cri");
   this.remember("heal_by", h); h.remember("heal_of", this);
@@ -646,6 +786,19 @@ P.walkTo = function(gx, spd){
 P.wanderDecide = function(){
   var r = Math.random();
   if(r < 0.55){
+    // on ne marche pas au hasard : on derive vers ceux qu'on apprecie
+    var vers = null, meilleur = 28;
+    for(var q=0;q<agents.length;q++){
+      var o2 = agents[q];
+      if(o2 === this || o2.mode === "ko") continue;
+      var l2 = this.relTo(o2);
+      if(l2 > meilleur && Math.abs(o2.x - this.x) < 900){ meilleur = l2; vers = o2; }
+    }
+    if(vers && Math.random() < 0.55){
+      this.walkTo(vers.x + rand(-70, 70), WALK*rand(.9,1.25));
+      this.goalZ = clamp(vers.z + rand(-0.10, 0.10), 0.16, 0.94);
+      return rand(1400, 3000);
+    }
     this.walkTo(this.x + rand(-380, 380), WALK*rand(.8,1.25));
     if(Math.random() < 0.45) this.goalZ = clamp(this.z + rand(-0.30, 0.30), 0.16, 0.94);
     return rand(1400, 3600);
@@ -657,8 +810,308 @@ P.wanderDecide = function(){
   this.goalX = null; this.walkT = 0; this.vx = 0;
   return rand(900, 2600);
 };
+/* COMMENT IL REAGIT A LA FORCE.
+   Aucune regle du type "il a peur donc il fuit". On PESE une quinzaine de facteurs pour
+   chaque reaction possible, puis on tire au sort proportionnellement aux poids obtenus.
+   Consequence : deux ninjas dans la meme situation ne font pas la meme chose, et le meme
+   ninja ne refait pas forcement deux fois pareil. Un fervent PEUT avoir peur. Un terrifie
+   PEUT venir voir. C'est le meme principe que l'IA de combat, qui marche depuis le debut.
+*/
+P.reagirForce = function(){
+  var dF   = Math.abs(this.x - FORCE.x);
+  var op   = (this.opMain||0) / 100;          // -1 .. +1
+  var ame  = this.ame || 0;                   // -1 aigri .. +1 serein
+  var T    = this.S;
+  var pv   = this.hp / this.maxHp;
+  var hum  = this.humeur() / 100;
+  var pres = Math.max(0, 1 - dF/420);         // a quel point elle est proche
+  var i;
+
+  // --- CE QUE FONT LES AUTRES : la panique et la ferveur sont contagieuses ---
+  var voisins = 0, fuient = 0, venerent = 0, allie = null, faible = null;
+  for(i=0;i<agents.length;i++){
+    var o = agents[i];
+    if(o === this || Math.abs(o.x - this.x) > 320) continue;
+    voisins++;
+    if(o.reactF === "fuir" || o.reactF === "cacher") fuient++;
+    if(o.reactF === "saluer" || o.reactF === "approcher") venerent++;
+    if(this.relTo(o) > 30 && !allie) allie = o;
+    if(o.mode === "ko" || o.hp < o.maxHp*0.35){ if(this.relTo(o) > 15) faible = o; }
+  }
+  var contagionPeur   = voisins ? fuient/voisins   : 0;
+  var contagionFerveur= voisins ? venerent/voisins : 0;
+
+  // --- son vecu personnel avec elle ---
+  var brutalise = 0, aide = 0;
+  for(i=0;i<this.memF.length;i++){
+    var age = (worldT - this.memF[i].t)/1000;
+    var frais = Math.max(0, 1 - age/150);
+    if(this.memF[i].g < 0) brutalise += -this.memF[i].g * frais;
+    else                   aide      +=  this.memF[i].g * frais;
+  }
+
+  // --- combien de temps elle est la sans rien faire ---
+  var calmeDepuis = Math.min(1, (worldT - FORCE.derniere) / 30000);
+  var nuitFacteur = nuit() ? 1.35 : 1;
+
+  var S = {};
+  // FUIR : la peur brute, amplifiee par la fragilite, la nuit, et les autres qui fuient
+  S.fuir = (-op*2.4 + brutalise*0.9) * pres * nuitFacteur
+         * (1.6 - T.calme) * (1.5 - pv*0.6) * (1 - ame*0.35)
+         + contagionPeur * 2.2 * (1.3 - T.calme);
+
+  // RECULER : la meme chose en moins violent — pour les calmes et les fiers
+  S.reculer = (-op*1.5 + brutalise*0.4) * pres * (0.6 + T.calme) + contagionPeur*0.7;
+
+  // SE CACHER derriere quelqu'un : quand on a peur ET qu'on n'est pas seul
+  S.cacher = allie ? ((-op*1.8 + brutalise*0.7) * pres * (1.4 - T.calme) * (0.5 + T.social)) : 0;
+
+  // FIGER : ni fuir ni approcher. La sideration. Frequent quand on ne sait pas quoi penser.
+  S.figer = (1.4 - Math.abs(op)*1.6) * pres * (0.7 + T.calme*0.6) + (1 - hum)*0.5;
+
+  // OBSERVER de loin : la mefiance prudente, ou la curiosite des calmes
+  S.observer = (0.8 - op*0.6) * pres * (0.5 + T.calme) * (0.8 + Math.abs(op)*0.4);
+
+  // APPROCHER : la fascination, la curiosite, le courage
+  S.approcher = (op*2.6 + aide*0.8) * (0.4 + pres*0.9) * (0.6 + ame*0.5)
+              * (0.7 + T.calme*0.5) + contagionFerveur*1.6;
+  if(dF < 80) S.approcher *= 0.25;              // deja tout pres : moins de raison d'avancer
+
+  // SALUER / se recueillir : la ferveur, quand elle est proche
+  S.saluer = (op*2.2 - 0.5) * pres * (0.5 + T.loyal*0.8) + contagionFerveur*1.9;
+
+  // DEFIER : la rage. Il faut de la haine, de l'amertume et pas de sang-froid.
+  S.defier = (-op*1.9 - 0.6) * (1.5 - T.calme*1.4) * (0.5 - ame*0.8) * (0.6 + pres*0.7);
+
+  // CHERCHER QUELQU'UN a qui en parler : les sociables, quand ils sont troubles
+  S.chercher = Math.abs(op) * 1.5 * T.social * (0.5 + contagionPeur*0.8) * (allie ? 1.4 : 0.7);
+
+  // PROTEGER un plus faible : la loyaute passe avant la peur
+  S.proteger = faible ? ((-op*1.2 + 0.5) * T.loyal * 2.2 * pres) : 0;
+
+  // IGNORER : elle ne fait rien depuis longtemps, ou il a autre chose a faire
+  S.ignorer = 1.2 + calmeDepuis*2.6 + (1-pres)*1.8 + (1-hum)*1.4 - Math.abs(op)*0.8;
+
+  // un peu de hasard partout : personne n'est une machine
+  var noms = Object.keys(S), total = 0;
+  for(i=0;i<noms.length;i++){
+    S[noms[i]] = Math.max(0, S[noms[i]] * (0.75 + Math.random()*0.5));
+    total += S[noms[i]];
+  }
+  if(total <= 0.001) return 0;
+
+  // tirage proportionnel : le plus probable n'est pas le seul possible
+  var tir = Math.random() * total, acc = 0, choix = "ignorer";
+  for(i=0;i<noms.length;i++){
+    acc += S[noms[i]];
+    if(tir <= acc){ choix = noms[i]; break; }
+  }
+  this.reactF = choix;
+  return this.appliquerReaction(choix, dF, allie, faible);
+};
+
+/* Il joue une suite de gestes que la TETE a composee elle-meme.
+   Ce ne sont pas des comportements pre-ecrits : le LLM assemble des briques
+   elementaires comme on assemble des mots. "Fuir" n'existe pas en tant que tel —
+   c'est ce qui ressort quand il enchaine "s_eloigner" puis "regarder" puis "dire".
+*/
+var LIEUX_NOM = null;
+function cibleDe(g, nom){
+  if(!nom) return null;
+  var n = String(nom).toLowerCase().trim();
+  if(/presence|force|chose|invisible|ciel|elle|ca|ça/.test(n)) return {x:FORCE.x, z:g.z, force:true};
+  var a2 = findAgent(n);
+  if(a2) return a2;
+  for(var i=0;i<LIEUX.length;i++)
+    if(LIEUX[i].nom.toLowerCase().indexOf(n) >= 0 || n.indexOf(LIEUX[i].nom.toLowerCase()) >= 0)
+      return {x:LIEUX[i].x, z:0.5};
+  return null;
+}
+var GESTES_OK = {idle:1, guard:1, jump:1, dash:1, downed:1, getup:1, attack:1, strong:1,
+                 hurt_light:1, run:1, intro:1, win:1};
+
+P.jouerSuite = function(){
+  if(!this.seq || this.seqI >= this.seq.length){ this.seq = null; return 0; }
+  var pas = this.seq[this.seqI++];
+  var quoi = String(pas.quoi||"").toLowerCase();
+  var c = cibleDe(this, pas.cible);
+
+  switch(quoi){
+    case "aller_vers":
+      if(!c) return 300;
+      this.walkTo(c.x + rand(-40, 40), WALK * rand(1.0, 1.45));
+      if(c.z != null) this.goalZ = clamp(c.z + rand(-0.08,0.08), 0.16, 0.94);
+      return rand(1100, 2100);
+
+    case "s_eloigner":
+      var dir = c ? (this.x < c.x ? -1 : 1) : (Math.random()<.5?-1:1);
+      this.walkTo(this.x + dir * rand(180, 400), RUN * rand(0.72, 0.95));
+      this.goalZ = clamp(this.z + dir*0.04 - rand(0.05,0.25), 0.16, 0.94);
+      return rand(900, 1900);
+
+    case "suivre":
+      if(!c) return 300;
+      this.walkTo(c.x + (this.x < c.x ? -45 : 45), WALK*1.2);
+      return rand(1200, 2200);
+
+    case "s_arreter":
+      this.goalX = null; this.walkT = 0; this.vx = 0;
+      return rand(500, 1200);
+
+    case "regarder":
+      this.goalX = null; this.vx = 0;
+      if(c) this.facing = (c.x >= this.x) ? 1 : -1;
+      return rand(700, 1600);
+
+    case "geste":
+      var gn = String(pas.cible || pas.texte || "idle").toLowerCase().replace(/[^a-z_]/g,"");
+      if(!GESTES_OK[gn] || !this.has(gn)) gn = this.has("guard") ? "guard" : "idle";
+      this.startAction(gn, rand(400, 1100), null);
+      return rand(600, 1400);
+
+    case "dire":
+      if(pas.texte){
+        var t = String(pas.texte).slice(0,74);
+        bubbles.push({o:this, txt:t, t:0, life:1500 + t.length*30});
+        this.dits.unshift(t.slice(0,60));
+        if(this.dits.length > 8) this.dits.pop();
+      }
+      return rand(1200, 2200);
+
+    case "attendre":
+      this.goalX = null; this.vx = 0;
+      return rand(900, 2400);
+
+    case "provoquer":
+      // il va le chercher. Ca peut degenerer, ou pas.
+      if(!c || !c.key) return 300;
+      this.facing = (c.x >= this.x) ? 1 : -1;
+      if(Math.abs(c.x - this.x) > 120){ this.walkTo(c.x + (this.x<c.x?-60:60), RUN*0.8); return rand(900,1600); }
+      this.fightCd = 0; c.fightCd = 0;
+      startFight(this, c, "provocation");
+      return rand(1200, 2000);
+
+    case "toucher":
+      // une bourrade, une tape. Pas un combat.
+      if(!c || !c.key) return 300;
+      this.facing = (c.x >= this.x) ? 1 : -1;
+      if(Math.abs(c.x - this.x) > 90){ this.walkTo(c.x + (this.x<c.x?-45:45), WALK*1.3); return rand(800,1500); }
+      this.startAction(this.pickAnim(["attack","strong"]), 0, null);
+      c.vx = (c.x >= this.x ? 1 : -1) * 90;
+      c.startAction(c.pickAnim(["hurt_light","guard"]), 220, null);
+      c.rel[this.key] = clamp((c.rel[this.key]||0) - 3, -100, 100);
+      if(AUD){ AUD.impact(c.x, 0.5); }
+      return rand(900, 1700);
+
+    case "soigner":
+      if(!c || !c.key) return 300;
+      if(Math.abs(c.x - this.x) > 90){ this.walkTo(c.x + (this.x<c.x?-40:40), RUN*0.8); return rand(900,1600); }
+      for(var Mi=0; Mi<this.moves.length; Mi++){
+        var mv = this.moves[Mi];
+        if(mv.heal && mv.ally && !(this.cd[mv.a]>0) && (mv.ck||0) <= this.ck){
+          this.cast(mv); return rand(1000, 1800);
+        }
+      }
+      return rand(600, 1200);
+  }
+  return 400;
+};
+
+// la tete depose une suite composee
+P.poserSuite = function(seq){
+  if(!seq || !seq.length) return false;
+  if(this.mode !== "wander" || this.duel || this.held || this.possessed) return false;
+  this.seq = seq.slice(0, 5);
+  this.seqI = 0;
+  this.brainT = 40;
+  return true;
+};
+
+P.appliquerReaction = function(choix, dF, allie, faible){
+  var loin = (this.x < FORCE.x ? -1 : 1);
+  switch(choix){
+    case "fuir":
+      this.peurT = rand(2500, 5200);
+      this.walkTo(this.x + loin*rand(240, 430), RUN*rand(0.8,0.95));
+      this.goalZ = clamp(this.z - rand(0.15,0.32), 0.16, 0.94);
+      if(Math.random() < 0.4) this.dire("blesse", true);
+      return rand(900, 1800);
+
+    case "reculer":
+      this.walkTo(this.x + loin*rand(110, 210), WALK*rand(1.0,1.2));
+      this.facing = -loin;
+      return rand(1100, 2300);
+
+    case "cacher":
+      if(!allie) return rand(600, 1200);
+      this.walkTo(allie.x + (allie.x < FORCE.x ? -34 : 34), RUN*0.75);
+      this.goalZ = clamp(allie.z - 0.06, 0.16, 0.94);
+      if(Math.random() < 0.3) this.dire("blesse", true);
+      return rand(1300, 2600);
+
+    case "figer":
+      this.goalX = null; this.vx = 0;
+      this.facing = -loin;
+      if(this.has("guard") && Math.random() < 0.5) this.startAction("guard", rand(500,1100), null);
+      return rand(900, 2000);
+
+    case "observer":
+      this.goalX = null; this.vx = 0;
+      this.facing = -loin;
+      if(Math.random() < 0.25) this.dire(this.situation());
+      return rand(1200, 2600);
+
+    case "approcher":
+      this.walkTo(FORCE.x + rand(-50, 50), WALK*rand(1.05,1.45));
+      if(Math.random() < 0.3) this.dire("content", true);
+      return rand(1300, 2500);
+
+    case "saluer":
+      this.goalX = null; this.vx = 0;
+      this.facing = -loin;
+      if(this.has("intro")) this.startAction("intro", rand(400,900), null);
+      spark(this.x, this.fy() - this.Ht*0.8, "#ffd07a", 0.7);
+      return rand(1500, 3000);
+
+    case "defier":
+      this.goalX = null; this.vx = 0;
+      this.facing = -loin;
+      this.startAction(this.pickAnim(["strong","attack"]), 0, null);
+      spark(this.x - loin*46, this.fy() - this.Ht*0.7, "#cc1518", 0.9);
+      shake += 1.4;
+      if(AUD) AUD.voix(this, "cri");
+      this.dire("tendu", true);
+      return rand(1400, 2800);
+
+    case "chercher":
+      if(allie){ this.walkTo(allie.x + rand(-45,45), WALK*1.2); return rand(1200, 2400); }
+      return rand(700, 1400);
+
+    case "proteger":
+      if(!faible) return rand(600, 1200);
+      this.walkTo(faible.x + (FORCE.x > faible.x ? 40 : -40), RUN*0.8);
+      this.facing = -loin;
+      return rand(1300, 2500);
+  }
+  return 0;   // "ignorer" : il continue sa vie, le cerveau normal reprend la main
+};
+
 P.socialDecide = function(){
   var i;
+
+  // Une suite composee par la tete est en cours ? Elle passe avant tout le reste.
+  if(this.seq && this.mode === "wander" && !this.duel && !this.held){
+    var r0 = this.jouerSuite();
+    if(r0) return r0;
+  }
+
+  // Que fait-il de la presence de la Force ? Voir P.reagirForce() : rien n'est scripte,
+  // tout est pese. Le meme ninja peut fuir aujourd'hui et s'approcher demain.
+  if(FORCE.la && this.mode === "wander" && !this.possessed && !this.held && !this.duel){
+    var rf = this.reagirForce();
+    if(rf) return rf;
+  }
+
   switch(this.mode){
     case "wander":
       return this.wanderDecide();
@@ -700,6 +1153,27 @@ P.socialDecide = function(){
       return 400;
     }
 
+    case "besoin": {
+      var L = this.lieu;
+      if(!L){ this.mode="wander"; this.faisant=null; return 300; }
+      if(!this.faisant){
+        var dd = Math.abs(L.x - this.x);
+        if(dd > 26){ this.walkTo(L.x, RUN*0.72); this.goalZ = 0.52; return 380; }
+        this.goalX=null; this.vx=0;
+        this.faisant = L.b;
+        this.besoinT = (L.b === "fatigue") ? rand(13000, 24000) : rand(7000, 12000);
+        this.dire(L.b, true);
+        logIt(this.name + (L.b==="faim" ? " mange à " + L.nom
+                        : (L.b==="fatigue" ? " s'endort — " + L.nom
+                                           : " s'entraîne aux poteaux")));
+        if(L.b === "fatigue") this.startAction("downed", this.besoinT, null);
+      }
+      // pendant qu'il y est
+      if(this.faisant === "ennui" && this.st === "free" && Math.random() < 0.55) this.comboStart();
+      if(this.faisant !== "fatigue" && Math.random() < 0.30) this.dire(this.faisant);
+      return 700;
+    }
+
     case "flee": {
       var f = this.fleeFrom;
       var dirx = f ? ((this.x >= f.x) ? 1 : -1) : (Math.random()<.5?-1:1);
@@ -722,15 +1196,70 @@ P.update = function(dt){
   if(this.talkCd>0) this.talkCd -= dt;
   if(this.fightCd>0) this.fightCd -= dt;
   if(this.riteCd>0)  this.riteCd  -= dt;
+  if(this.peurT>0)   this.peurT   -= dt;
+  // LE TEMPS PASSE. On oublie les rancunes, les liens tiedes s'estompent, les blessures
+  // se referment. Sans ca, un monde ne peut QUE s'aigrir : chaque bagarre laisse une trace
+  // definitive et rien ne la repare. Ici, ce qui n'est pas entretenu retombe vers zero.
+  this.oubliT = (this.oubliT||0) + dt;
+  if(this.oubliT > 4000){
+    this.oubliT = 0;
+    for(var kk in this.rel){
+      var v = this.rel[kk];
+      if(v > 0.4)       this.rel[kk] = v - 0.14;      // une amitie sans entretien se refroidit doucement
+      else if(v < -0.4) this.rel[kk] = v + 0.40;      // mais une rancune s'oublie ~3x plus vite
+      else this.rel[kk] = 0;
+    }
+    for(var gg in this.grudge) if(this.grudge[gg] > 0) this.grudge[gg] = Math.max(0, this.grudge[gg] - 1.1);
+    // les coups encaisses s'effacent aussi
+    // sans manifestation, l'avis sur la Force s'estompe : on doute, on oublie, on passe a autre chose
+    if(worldT - FORCE.derniere > 25000 && this.opMain !== 0){
+      this.opMain += (this.opMain > 0 ? -0.5 : 0.5);
+      if(Math.abs(this.opMain) < 0.6) this.opMain = 0;
+    }
+    if(this.coups > 0)    this.coups    = Math.max(0, this.coups - 0.10);
+    if(this.douceurs > 0) this.douceurs = Math.max(0, this.douceurs - 0.035); // le bon dure plus longtemps
+  }
+
+  // l'ame bouge lentement : il faut du temps pour aigrir quelqu'un, et du temps pour l'apaiser
+  this.ameT = (this.ameT||0) + dt;
+  if(this.ameT > 2000){
+    this.ameT = 0;
+    var vise = this.calculeAme();
+    this.ame += (vise - this.ame) * 0.06;
+    this.ame = clamp(this.ame, -1, 1);
+  }
   if(this.buffT>0){ this.buffT -= dt; if(this.buffT<=0){ this.atkMul=1; this.defMul=1; } }
   if(this.sageT>0){ this.sageT -= dt; if(this.sageT<=0) this.sage=false; }
   if(this.modeT>0){
     this.modeT -= dt;
     if(this.modeT<=0 && (this.mode==="talk" || this.mode==="flee")) this.endMode();
   }
+  if(this.faisant){
+    if(this.mode !== "besoin"){            // on l'a embarque ailleurs (duel, scene…)
+      this.faisant = null; this.lieu = null; this.besoinT = 0;
+    } else {
+      this.besoinT -= dt;
+      if(this.besoinT <= 0){
+        this[this.faisant] = 0;
+        var quoi = this.faisant;
+        this.faisant = null; this.lieu = null;
+        this.mode = "wander"; this.modeT = 0; this.brainT = 200; this.st = "free";
+        this.dire("content", true);
+        if(quoi === "fatigue") this.hp = Math.min(this.maxHp, this.hp + this.maxHp*0.25);
+      }
+    }
+  }
   for(k in this.grudge) if(this.grudge[k]>0) this.grudge[k] = Math.max(0, this.grudge[k] - dt*0.0012);
 
   this.ck = Math.min(100, this.ck + (this.mode==="fight" ? 7 : 12) * s);
+
+  // les besoins montent tout seuls. C'est ce qui les fait bouger.
+  if(this.mode !== "ko" && !this.faisant && !this.held){
+    var eff = (this.mode==="fight") ? 2.2 : 1;
+    this.faim    = Math.min(100, this.faim    + 0.150*s*eff);
+    this.fatigue = Math.min(100, this.fatigue + 0.125*s*eff*(nuit()?1.9:1));
+    this.ennui   = Math.min(100, this.ennui   + 0.210*s*(this.mode==="wander"?1:0.15));
+  }
   if(this.mode!=="fight" && this.mode!=="ko" && this.hp < this.maxHp)
     this.hp = Math.min(this.maxHp, this.hp + 1.8*s);
 
@@ -883,8 +1412,22 @@ P.stepAnim = function(dt){
 
 // un seul ninja pilote le groupe : ils parlent CHACUN SON TOUR, pas tous en meme temps.
 // dans quelle humeur il est, pour choisir la bonne pile de repliques
+P.humeur = function(){
+  return clamp(100 - (this.faim + this.fatigue + this.ennui)/3, 0, 100);
+};
+P.besoinUrgent = function(){
+  var seuilF = nuit() ? 45 : 78;                 // la nuit, on tombe de sommeil
+  if(this.fatigue >= seuilF) return "fatigue";
+  if(this.faim    >= 74)     return "faim";
+  if(this.ennui   >= 76)     return "ennui";
+  return null;
+};
 P.situation = function(){
-  if(this.hp < this.maxHp*0.42) return "blesse";
+  if(this.faisant)               return this.faisant;   // il mange / il dort / il s'entraine
+  if(this.hp < this.maxHp*0.42)  return "blesse";
+  if(this.faim    > 70)          return "faim";
+  if(this.fatigue > 72)          return "fatigue";
+  if(this.ennui   > 72)          return "ennui";
   if(this.mode === "fight")     return "tendu";
   if(this.mode === "flee")      return "blesse";
   if(this.derniereVictoire && worldT - this.derniereVictoire < 12000) return "content";
@@ -898,7 +1441,8 @@ P.dire = function(cat, force){
   if(!txt) txt = SOC.line(this.key, cat);
   if(!txt || txt === "...") return;
   if(this.dits.indexOf(txt) >= 0) return;      // jamais deux fois de suite
-  bubbles.push({o:this, txt:String(txt).slice(0,74), t:0, life:2900});
+  var _t2=String(txt).slice(0,74);
+  bubbles.push({o:this, txt:_t2, t:0, life:1500 + _t2.length*30});
   this.dits.unshift(txt);
   if(this.dits.length > 8) this.dits.pop();
   if(AUD && Math.random() < 0.22) AUD.voix(this, "effort", 0.45);
@@ -914,9 +1458,24 @@ P.talkTick = function(dt){
     if(grp[k].mode==="talk" && grp[k].talkGrp===grp){ pilote = grp[k]; break; }
   if(pilote !== this) return;
 
-  // On ne se TAIT plus en attendant le LLM : on pioche dans la reserve.
-  // Quand le dialogue ecrit arrive, il prend simplement le relais.
-  if(grp.wait > 0){ grp.wait -= dt; if(grp.script) grp.wait = 0; }
+  // PRIORITE AU LLM : tant que l'attente n'est pas ecoulee et qu'aucun dialogue ecrit
+  // n'est arrive, on garde le silence (ils se regardent, se rejoignent). Le script en
+  // dur ne sort QUE si le LLM tarde vraiment trop. C'est ce qui fait qu'on voit presque
+  // toujours du texte unique, et non les memes phrases pre-ecrites.
+  if(grp.attenteLLM > 0 && !grp.script){
+    grp.attenteLLM -= dt;
+    // pendant que le LLM ecrit : ils se rejoignent et se regardent. Ca ne se voit pas
+    // comme une attente, ca se voit comme deux personnes qui s'appretent a parler.
+    for(var q=0;q<grp.length;q++){
+      var gq = grp[q];
+      if(gq.mode !== "talk") continue;
+      var cible = grp[(q+1) % grp.length];
+      if(cible && cible !== gq) gq.facing = (cible.x >= gq.x) ? 1 : -1;
+    }
+    if(grp.script){ grp.attenteLLM = 0; }
+    else if(grp.attenteLLM > 0){ return; }
+    else if(grp.secours){ grp.script = grp.secours; grp.si = 0; }  // filet de dernier recours
+  }
 
   grp.nextT -= dt;
   if(grp.nextT > 0) return;
@@ -928,6 +1487,12 @@ P.talkTick = function(dt){
     if(!sp || grp.indexOf(sp) < 0) sp = grp[grp.turn % grp.length];
     txt = line.dit;
   } else if(grp.script){
+    // le LLM ecrit peut-etre encore la suite : on patiente un peu avant de conclure
+    if(grp.fromLLM && !grp.__finFlux){
+      if(!grp.__flux0) grp.__flux0 = worldT;
+      if(worldT - grp.__flux0 < 2200){ grp.nextT = 200; return; }
+      grp.__finFlux = true;
+    }
     // le dialogue est fini. Si c'etait une scene : L'ACTE, et on le laisse voir.
     if(grp.rite && !grp.__acte){
       grp.__acte = 1;
@@ -938,6 +1503,8 @@ P.talkTick = function(dt){
     for(i=0;i<grp.length;i++) grp[i].modeT = Math.min(grp[i].modeT, 900);
     return;
   } else {
+    // aucun dialogue ecrit : on pioche dans la reserve (deja fabriquee d'avance par le LLM,
+    // donc c'est du texte unique, pas une phrase en dur qui se repete)
     sp = grp[grp.turn % grp.length];
     var tense = false;
     for(i=0;i<grp.length;i++) if(grp[i]!==sp && (sp.relTo(grp[i]) < -5 || grp[i].relTo(sp) < -5)) tense = true;
@@ -948,14 +1515,15 @@ P.talkTick = function(dt){
   grp.turn++;
 
   if(sp && txt){
-    bubbles.push({o:sp, txt:String(txt).slice(0,74), t:0, life:2700});
+    var _t=String(txt).slice(0,74);
+    bubbles.push({o:sp, txt:_t, t:0, life:1400 + _t.length*30});
     sp.dits.unshift(String(txt).slice(0,60));
     if(sp.dits.length > 5) sp.dits.pop();
     for(i=0;i<grp.length;i++){
       var o=grp[i]; if(o===sp) continue;
       var t2 = (sp.relTo(o) < -5 || o.relTo(sp) < -5);
-      sp.rel[o.key] = clamp((sp.rel[o.key]||0) + (t2?-1.2:3.0), -100, 100);
-      o.rel[sp.key] = clamp((o.rel[sp.key]||0) + (t2?-1.2:2.4), -100, 100);
+      sp.rel[o.key] = clamp((sp.rel[o.key]||0) + (t2? -1.1*sp.aCran() : 4.6*sp.ouverture()), -100, 100);
+      o.rel[sp.key] = clamp((o.rel[sp.key]||0) + (t2? -1.1*o.aCran()  : 4.0*o.ouverture()),  -100, 100);
       o.facing = (sp.x >= o.x) ? 1 : -1;
     }
   }
@@ -981,7 +1549,7 @@ P.endMode = function(){
       }
     }
     for(var k=0;k<grp.length;k++){
-      grp[k].talkGrp=null; grp[k].talkCd = rand(26000, 62000);
+      grp[k].talkGrp=null; grp[k].talkCd = rand(14000, 34000);
       for(var q=0;q<grp.length;q++) if(grp[q]!==grp[k]) grp[k].remember("talked", grp[q]);
       if(grp[k].mode==="talk"){ grp[k].mode="wander"; grp[k].modeT=0; grp[k].brainT=100; }
     }
@@ -1043,7 +1611,8 @@ function niveauDe(a, b){
 }
 function Duel(A, B, reason){
   this.A=A; this.B=B; this.reason=reason; this.dead=false; this.t=0; this.endT=0; this.joinT=2500;
-  this.niveau = niveauDe(A[0], B[0]);
+  // un entrainement reste un entrainement, meme entre deux qui ne s'aiment pas trop
+  this.niveau = (reason === "entraînement") ? "amical" : niveauDe(A[0], B[0]);
   var all=A.concat(B), i;
   for(i=0;i<all.length;i++){
     var g=all[i];
@@ -1051,6 +1620,7 @@ function Duel(A, B, reason){
     g.duel=this; g.side=(A.indexOf(g)>=0)?0:1;
     g.mode="fight"; g.modeT=0; g.goalX=null; g.walkT=0; g.brainT=120+i*90;
     g.healTarget=null;
+    g.faisant=null; g.lieu=null; g.besoinT=0;     // il lachera son bol de ramen
   }
   this.cx=(A[0].x+B[0].x)/2;
   duels.push(this);
@@ -1115,7 +1685,8 @@ Duel.prototype.tick = function(dt){
           arr.push(f);
           f.leaveTalk();
           f.duel=this; f.side=weak; f.mode="fight"; f.modeT=0; f.goalX=null; f.brainT=150;
-          friend.rel[f.key] = clamp((friend.rel[f.key]||0) + 18, -100, 100);
+          friend.rel[f.key] = clamp((friend.rel[f.key]||0) + 18*friend.ouverture(), -100, 100);
+          friend.douceurs += 1;
           friend.remember("helped", f);
           logIt(f.name + " vient prêter main-forte à " + friend.name + " !");
           break;
@@ -1132,8 +1703,17 @@ Duel.prototype.finish = function(win){
   var i;
   // se battre laisse des traces
   for(i=0;i<winners.length;i++) for(var q=0;q<losers.length;q++){
-    losers[q].rel[winners[i].key] = clamp((losers[q].rel[winners[i].key]||0) - (this.niveau==="amical"?2:14), -100, 100);
-    winners[i].rel[losers[q].key] = clamp((winners[i].rel[losers[q].key]||0) + (this.niveau==="amical"?6:-4), -100, 100);
+    losers[q].rel[winners[i].key] = clamp((losers[q].rel[winners[i].key]||0) + (this.niveau==="amical"? 3 : -11), -100, 100);
+    winners[i].rel[losers[q].key] = clamp((winners[i].rel[losers[q].key]||0) + (this.niveau==="amical"? 7 : -3), -100, 100);
+    if(this.niveau === "amical"){
+      losers[q].douceurs += 0.5; winners[i].douceurs += 0.5;
+      if(this.reason === "entraînement"){
+        losers[q].rel[winners[i].key] = clamp((losers[q].rel[winners[i].key]||0) + 5, -100, 100);
+        winners[i].rel[losers[q].key] = clamp((winners[i].rel[losers[q].key]||0) + 5, -100, 100);
+        losers[q].ennui = Math.max(0, losers[q].ennui - 45);
+        winners[i].ennui = Math.max(0, winners[i].ennui - 45);
+      }
+    }
   }
   for(i=0;i<winners.length;i++){
     var w=winners[i];
@@ -1255,11 +1835,26 @@ document.getElementById("evNo").onclick  = function(){ answerEvent(false); };
 
 /* ================================================================ FX / LOG */
 function spark(x,y,c,s){ sparks.push({x:x, y:y, c:c||"#fff", s:s||1, t:0, life:280}); }
+var chronique = [];
 function logIt(txt){
+  var hh = Math.floor(heure), mm = Math.floor((heure - hh) * 60);
+  chronique.unshift({h:(hh<10?"0":"")+hh+":"+(mm<10?"0":"")+mm, t:txt});
+  if(chronique.length > 200) chronique.pop();
+  var el2 = document.getElementById("chronList");
+  if(el2 && document.getElementById("chron").classList.contains("on")) majChronique();
+
   logLines.unshift(txt);
   if(logLines.length>7) logLines.pop();
   var el=document.getElementById("log");
   if(el) el.innerHTML = logLines.map(function(l,i){ return "<div style='opacity:"+(1-i*0.12).toFixed(2)+"'>"+l+"</div>"; }).join("");
+}
+
+function majChronique(){
+  var el = document.getElementById("chronList");
+  if(!el) return;
+  el.innerHTML = chronique.map(function(c){
+    return "<div><em>" + c.h + "</em>" + c.t + "</div>";
+  }).join("");
 }
 
 /* ================================================================ TICK SOCIAL */
@@ -1274,6 +1869,21 @@ function fightChance(a, b, d){
   var c = hostility*0.0045 + (g/100)*0.007 + sp*0.0022;
   c *= prox * (1.25 - a.S.calme*0.85) * TENSION;
   if(a.hp < a.maxHp*0.5) c *= 0.25;
+  c *= (0.55 + (100 - a.humeur())/85) * a.aCran();   // de mauvaise humeur et aigri : on cherche la bagarre
+  // Le probleme de fond : avec des relations neutres, RIEN ne pousse au conflit et le monde
+  // s'endort. La friction ne vient pas que de la haine — elle vient des caracteres qui se
+  // heurtent, de la mauvaise humeur, de la competition pour les memes choses, de l'orgueil.
+  var lien = Math.min(a.relTo(b), b.relTo(a));
+  if(lien > -12 && !(a.grudge[b.key] > 12)){
+    var friction = 0.42;
+    friction += (1 - a.S.calme) * (1 - b.S.calme) * 0.9;      // deux impulsifs : etincelles
+    friction += (1 - a.humeur()/100) * 0.7;                    // il va mal, il supporte mal
+    if(a.lieu && b.lieu && a.lieu === b.lieu) friction += 0.5; // ils veulent la meme chose
+    if(b.derniereVictoire && worldT - b.derniereVictoire < 20000) friction += 0.45;
+    if(a.ennui > 65) friction += 0.5;                          // l'ennui cherche l'incident
+    c *= Math.min(1.15, friction);
+  }
+  if(nuit()) c *= 0.45;                   // la nuit, on dort plutot
   return c;
 }
 function reasonOf(a,b){
@@ -1331,7 +1941,59 @@ function socialTick(dt){
       }
     }
 
-    if(a.mode==="heal" || a.mode==="flee") continue;
+    if(a.mode==="heal" || a.mode==="flee" || a.mode==="besoin") continue;
+
+    // un besoin qui crie : on y va
+    if(a.mode==="wander"){
+      var bes = a.besoinUrgent();
+      if(bes && Math.random() < 0.55){
+        var L = lieuPour(bes, a.x);
+        if(L){ a.mode="besoin"; a.lieu=L; a.faisant=null; a.modeT=0; a.brainT=80; continue; }
+      }
+    }
+
+    // ANTICIPATION : deux ninjas qui se rapprochent vont probablement se parler.
+    // On previent la tete des maintenant : elle aura fini d'ecrire quand ils s'arreteront.
+    if(a.mode==="wander" && !a.duel && a.talkCd < 4000 && !a.__preAvis){
+      for(j=0;j<agents.length;j++){
+        b = agents[j];
+        if(b===a || b.duel || b.mode!=="wander" || b.possessed || b.held) continue;
+        var dd2 = Math.abs(b.x - a.x);
+        if(dd2 > 60 && dd2 < 260 && Math.abs(b.z - a.z) < 0.3){
+          a.__preAvis = worldT;
+          if(window.KV_MIND && window.KV_MIND.prechauffe) window.KV_MIND.prechauffe(a, b);
+          break;
+        }
+      }
+    }
+    if(a.__preAvis && worldT - a.__preAvis > 12000) a.__preAvis = 0;
+
+    // S'ENTRAINER ENSEMBLE. C'est ainsi qu'on progresse dans ce monde, et ca resout
+    // proprement ce que je cherchais a obtenir en fabriquant de l'hostilite : les
+    // techniques servent, il se passe quelque chose, et ca RAPPROCHE au lieu de diviser.
+    if(a.mode==="wander" && !a.duel && a.fightCd<=0 && a.hp > a.maxHp*0.72){
+      var envie = 0.0016
+        + (a.ennui/100) * 0.010          // on s'ennuie : autant s'entrainer
+        + (a.humeur()/100) * 0.004       // en forme, on a de l'energie a depenser
+        + (1 - a.S.calme) * 0.004;       // les impulsifs ont la bougeotte
+      if(nuit()) envie *= 0.25;
+      if(Math.random() < envie){
+        var part = null, best2 = 8;
+        for(j=0;j<agents.length;j++){
+          b = agents[j];
+          if(b===a || b.duel || b.mode!=="wander" || b.possessed || b.held) continue;
+          if(b.fightCd > 0 || b.hp < b.maxHp*0.72) continue;
+          if(Math.abs(b.x - a.x) > 340) continue;
+          // on s'entraine avec quelqu'un qu'on apprecie, ou qu'on veut mesurer
+          var sc3 = a.relTo(b) * 1.2 + SOC.spark(a.key,b.key) * 60 + Math.random()*30;
+          if(sc3 > best2){ best2 = sc3; part = b; }
+        }
+        if(part){
+          startFight(a, part, "entraînement");
+          continue;
+        }
+      }
+    }
 
     // une scene ? c'est ce qui vaut la peine d'etre regarde
     if(a.mode==="wander" && !a.duel){
@@ -1362,15 +2024,20 @@ function socialTick(dt){
     if(started || a.duel) continue;
 
     // conversation
-    if(a.mode==="wander" && a.talkCd<=0 && Math.random() < 0.13*a.S.social){
+    if(a.mode==="wander" && a.talkCd<=0 && Math.random() < 0.20*a.S.social*(0.45 + a.humeur()/90)*a.ouverture()){
+      var best = null, bestS = -1e9;
       for(j=0;j<agents.length;j++){
         b = agents[j];
         if(b===a || b.duel || b.mode!=="wander" || b.possessed || b.talkCd>0) continue;
-        if(Math.abs(b.x - a.x) > 100) continue;
+        if(Math.abs(b.x - a.x) > 130) continue;
         if(a.relTo(b) < -25 || b.relTo(a) < -25) continue;
-        startTalk(a, b);
-        break;
+        // on va vers ceux qu'on apprecie : c'est ainsi que se creent les amities
+        var sc2 = a.relTo(b) * 1.6 + b.relTo(a) * 0.8
+                - Math.abs(b.x - a.x) * 0.12
+                + Math.random() * 22;
+        if(sc2 > bestS){ bestS = sc2; best = b; }
       }
+      if(best) startTalk(a, best);
     }
   }
 }
@@ -1381,16 +2048,32 @@ var RITES = [
    test:function(a,b){ return a.relTo(b) > 72 && !a.fait["amour_"+b.key]; }},
   {id:"guerre",    txt:"☠ %A déclare la guerre à %B",        p:.55,
    test:function(a,b){ return a.relTo(b) < -72 && a.fightCd <= 0; }},
-  {id:"defi",      txt:"🥊 %A défie %B",                     p:.55,
+  {id:"defi",      txt:"🥊 %A défie %B",                     p:.62,
    test:function(a,b){ return SOC.spark(a.key,b.key) > .10 && a.hp > a.maxHp*.75 && a.fightCd <= 0; }},
-  {id:"betise",    txt:"😈 %A prépare un mauvais coup à %B", p:.28,
-   test:function(a,b){ return a.S.calme < .42 && Math.abs(a.relTo(b)) < 35; }},
-  {id:"dispute",   txt:"💢 %A et %B s'engueulent",           p:.42,
-   test:function(a,b){ return a.relTo(b) < -18 && a.relTo(b) > -62; }},
+  {id:"betise",    txt:"😈 %A prépare un mauvais coup à %B", p:.34,
+   test:function(a,b){ return a.S.calme < .45 && a.relTo(b) > 14 && a.relTo(b) < 62; }},
+  {id:"dispute",   txt:"💢 %A et %B s'engueulent",           p:.55,
+   test:function(a,b){ return (a.relTo(b) < -14 && a.relTo(b) > -62) || (a.grudge[b.key]||0) > 15; }},
   {id:"reconcile", txt:"🤝 %A vient faire la paix avec %B",  p:.70,
    test:function(a,b){ return (a.grudge[b.key]||0) > 22 && a.relTo(b) > -25; }},
-  {id:"admire",    txt:"✨ %A ne quitte plus %B des yeux",   p:.35,
-   test:function(a,b){ return a.relTo(b) > 55 && !a.fait["admire_"+b.key]; }}
+  {id:"admire",    txt:"✨ %A ne quitte plus %B des yeux",   p:.42,
+   test:function(a,b){ return a.relTo(b) > 42 && !a.fait["admire_"+b.key]; }},
+
+  // ILS PARLENT DE TOI. En secret, avec peur, ou avec ferveur.
+  {id:"secret",    txt:"🤫 %A confie quelque chose à %B",    p:.75,
+   test:function(a,b){ return a.opMain <= -32 && b.opMain <= -12 && a.relTo(b) > -20; }},
+  {id:"culte",     txt:"🙏 %A et %B parlent de la Présence", p:.75,
+   test:function(a,b){ return a.opMain >= 55 && b.opMain >= 30; }},
+  {id:"defiance",  txt:"✊ %A veut défier la Présence",       p:.60,
+   test:function(a,b){ return a.opMain <= -60 && a.ame <= -0.25 && a.S.calme < .55; }},
+
+  // Ils cherchent a COMPRENDRE. Aucune reponse n'est imposee : le LLM invente,
+  // et deux parties ne donneront pas les memes theories.
+  {id:"theorie",   txt:"❓ %A et %B tentent de comprendre",   p:.55,
+   test:function(a,b){
+     return Math.abs(a.opMain) > 22 && Math.abs(b.opMain) > 12
+         && a.memF.length >= 2 && a.S.calme > .35;
+   }}
 ];
 var RITE_SCENE = {
   amour:     "%A déclare ses sentiments à %B. C'est sincère, maladroit, un peu gênant.",
@@ -1405,37 +2088,61 @@ function riteTexte(t, a, b){ return t.replace(/%A/g, a.name).replace(/%B/g, b.na
 
 // Le filet : si le LLM n'ecrit rien, la scene se joue QUAND MEME comme annonce.
 var SCRIPTS = {
+  // La BETISE est une farce, pas une agression. Le dernier mot de A = le moment ou il piege ;
+  // l'acte (acteRite) = un petit coup pour rire, pas un vrai coup de poing.
   betise:[
-    [[0,"Hé, %B ! Regarde là-bas, vite !"],[1,"...Où ça ?"],[0,"Ha ! Tu as regardé !"],[1,"Tu vas me le payer."]],
-    [[0,"%B. Tu as un truc dans le dos."],[1,"Quoi ? Où ?"],[0,"Bwahaha ! Trop facile."],[1,"Très drôle. Vraiment."]],
-    [[0,"Approche, j'ai un truc à te montrer."],[1,"J'ai un mauvais pressentiment."],[0,"T'as raison."],[1,"..."]]
+    [[0,"%B, t'as un truc juste derrière toi..."],[1,"Quoi ? Où ça ?"],[0,"Pff, t'as vraiment regardé !"],[1,"...Très malin. Vraiment."]],
+    [[0,"Tiens, goûte ça, c'est bon."],[1,"...T'es sûr ?"],[0,"Ha ! Fallait voir ta tête !"],[1,"Espèce de crétin."]],
+    [[0,"Approche, faut que je te montre un truc."],[1,"J'ai un mauvais pressentiment, là."],[0,"Et t'avais raison !"],[1,"J'aurais dû m'en douter..."]]
   ],
-  amour:[
-    [[0,"%B. Faut que je te dise un truc."],[1,"Je t'écoute."],[0,"Tu... tu comptes beaucoup pour moi."],[1,"..."]],
-    [[0,"J'y pense depuis un moment."],[1,"À quoi ?"],[0,"À toi. Voilà, c'est dit."],[1,"..."]]
+  amour_oui:[
+    [[0,"%B... attends. Faut que je te dise."],[1,"Qu'est-ce qu'il y a ?"],[0,"Tu comptes énormément pour moi. Voilà."],[1,"...Moi aussi. Vraiment."]],
+    [[0,"J'y pense depuis un moment, alors je me lance."],[1,"Je t'écoute."],[0,"C'est toi. Ça a toujours été toi."],[1,"...Viens là, idiot."]]
+  ],
+  amour_non:[
+    [[0,"%B, je peux te parler ? C'est important."],[1,"Bien sûr, vas-y."],[0,"Voilà... tu me plais. Depuis longtemps."],[1,"Je suis désolé... je ne peux pas. Pardonne-moi."]],
+    [[0,"Faut que je sois honnête avec toi."],[1,"Qu'est-ce qui se passe ?"],[0,"Je tiens à toi. Plus que je devrais."],[1,"...Je ne ressens pas la même chose. Désolé."]]
   ],
   guerre:[
-    [[0,"%B. C'est terminé, tout ça."],[1,"Enfin."],[0,"La prochaine fois qu'on se croise, l'un de nous reste au sol."],[1,"Ce ne sera pas moi."]],
-    [[0,"Je ne te laisserai plus rien passer."],[1,"Essaie donc."],[0,"Prépare-toi."],[1,"Je n'attends que ça."]]
+    [[0,"%B. C'est terminé, entre nous."],[1,"Il était temps que tu l'admettes."],[0,"Ici et maintenant. L'un de nous ne se relèvera pas."],[1,"Alors ce sera toi."]],
+    [[0,"Je ne te laisserai plus rien passer."],[1,"Grands mots. Prouve-le."],[0,"Avec plaisir. En garde."],[1,"Viens mourir, alors."]]
   ],
   defi:[
-    [[0,"%B ! On règle ça, tout de suite ?"],[1,"Tu es sûr de toi."],[0,"Pas de technique interdite. Juste toi et moi."],[1,"Ça marche."]],
-    [[0,"T'as progressé, paraît-il."],[1,"Viens vérifier."],[0,"C'est ce que je comptais faire."],[1,"En garde."]]
+    [[0,"%B ! On règle ça tout de suite, un vrai duel ?"],[1,"Tu es sûr de toi ?"],[0,"Rien de mortel. Juste toi et moi. En garde !"],[1,"Ça marche. Montre-moi ce que tu vaux."]],
+    [[0,"Paraît que t'as progressé."],[1,"Viens vérifier toi-même."],[0,"C'est exactement ce que je vais faire !"],[1,"En garde, alors."]]
   ],
   dispute:[
-    [[0,"Tu te fous de moi, %B ?"],[1,"Baisse d'un ton."],[0,"Sinon quoi ?"],[1,"Ne me tente pas."]],
-    [[0,"J'en ai assez de tes conneries."],[1,"C'est toi qui commences, toujours."],[0,"Répète un peu."],[1,"J'ai été clair."]]
+    [[0,"Tu te fous de moi, %B ?"],[1,"Baisse d'un ton, toi."],[0,"Sinon quoi, hein ?"],[1,"Ne me pousse pas à bout."]],
+    [[0,"J'en ai marre de tes conneries."],[1,"C'est toi qui commences, à chaque fois."],[0,"Répète un peu pour voir."],[1,"Tu m'as très bien entendu."]]
   ],
   reconcile:[
-    [[0,"%B. Je... voilà. C'était idiot."],[1,"Tiens donc."],[0,"On oublie ?"],[1,"...On oublie."]],
-    [[0,"J'aurais pas dû."],[1,"Non, en effet."],[0,"Bon. Voilà."],[1,"Ça va. C'est oublié."]]
+    [[0,"%B... écoute. C'était idiot de ma part."],[1,"Tiens, tu l'admets enfin."],[0,"Bon. On oublie tout ça ?"],[1,"...D'accord. On oublie."]],
+    [[0,"J'aurais pas dû réagir comme ça."],[1,"Non, en effet."],[0,"Voilà. Je m'excuse. C'est dit."],[1,"C'est bon. On repart à zéro."]]
   ],
   admire:[
-    [[0,"Franchement, %B... tu es impressionnant."],[1,"..."],[0,"Non mais vraiment."],[1,"Arrête de me fixer comme ça."]]
+    [[0,"Franchement %B, t'es vraiment impressionnant."],[1,"...Arrête."],[0,"Non mais je suis sérieux, là !"],[1,"Tu veux bien arrêter de me fixer comme ça ?"]]
+  ],
+  secret:[
+    [[0,"%B... tu l'as senti, toi aussi ?"],[1,"Baisse d'un ton."],[0,"Quelque chose nous attrape. Sans prévenir."],[1,"Je sais. N'en parle à personne."]],
+    [[0,"Il y a une chose ici. Je ne l'invente pas."],[1,"Moi aussi je la sens."],[0,"Elle nous soulève comme des poupées."],[1,"Alors il faut rester à l'écart."]]
+  ],
+  culte:[
+    [[0,"%B. Elle est là. Je la sens qui veille."],[1,"Moi aussi. Elle nous protège."],[0,"Elle nous a choisis, tu comprends ?"],[1,"Alors soyons dignes d'elle."]],
+    [[0,"Tu as vu ? Elle est revenue."],[1,"Elle revient toujours."],[0,"Rien ne peut nous arriver."],[1,"Rien. Tant qu'elle regarde."]]
+  ],
+  defiance:[
+    [[0,"J'en ai assez de cette chose, %B."],[1,"Tu ne peux rien contre elle."],[0,"On verra bien. Qu'elle vienne."],[1,"...Tu vas le regretter."]]
+  ],
+  theorie:[
+    [[0,"%B. À ton avis, qu'est-ce que c'est ?"],[1,"Je n'en sais rien. Rien de vivant."],[0,"Elle choisit. Elle décide. Donc elle pense."],[1,"Alors elle nous observe depuis le début."]],
+    [[0,"Pourquoi nous ? Pourquoi ici ?"],[1,"Peut-être qu'il n'y a pas de pourquoi."],[0,"Il y en a toujours un."],[1,"Pas forcément un qui nous plaise."]],
+    [[0,"Et si on n'était là que pour ça ?"],[1,"Pour quoi ?"],[0,"Pour être regardés."],[1,"...Ne redis jamais ça."]]
   ]
 };
 function scriptDeSecours(grp){
-  var L = SCRIPTS[grp.rite];
+  var cle = grp.rite;
+  if(grp.rite === "amour") cle = (grp[1].relTo(grp[0]) > 25) ? "amour_oui" : "amour_non";
+  var L = SCRIPTS[cle];
   if(!L || !L.length) return null;
   var m = L[Math.floor(Math.random()*L.length)], out = [], i;
   for(i=0;i<m.length;i++){
@@ -1465,10 +2172,21 @@ function acteRite(grp){
   }
 
   switch(id){
-    case "betise":                       // il le piege POUR DE VRAI
-      frappe(a, b, 0.9, "#ffd07a");
-      b.dire("tendu", true);
+    case "betise": {
+      // une FARCE, pas une agression : petit coup en douce, la victime sursaute et râle.
+      a.facing = (b.x >= a.x) ? 1 : -1;
+      a.startAction(a.pickAnim(["attack","strong"]), 0, function(){
+        a.startAction("win", 600, null);           // il se marre
+      });
+      b.vx = (b.x >= a.x ? 1 : -1) * 70;            // juste un sursaut, pas un envol
+      b.startAction(b.pickAnim(["hurt_light","guard"]), 260, null);
+      b.flash = 80;
+      spark(b.x, b.fy() - b.Ht*0.55, "#ffe08a", 0.5);   // petite étincelle jaune, pas un choc
+      shake += 1;
+      if(AUD){ AUD.impact(b.x, 0.4); AUD.voix(b, "effort", 0.6); }
+      // pas de perte de PV réelle : c'est pour rire (appliqueRite ne fait qu'un +grudge léger)
       break;
+    }
 
     case "amour":
       if(b.relTo(a) > 25){               // acceptee : les deux rayonnent
@@ -1504,13 +2222,42 @@ function acteRite(grp){
       b.startAction(b.has("guard") ? "guard" : "idle", 400, null);
       break;
 
+    case "theorie":                      // ils lèvent les yeux, cherchent quelque chose
+      a.goalX = null; b.goalX = null; a.vx = 0; b.vx = 0;
+      a.facing = (FORCE.x >= a.x) ? 1 : -1;
+      b.facing = (b.x >= a.x) ? -1 : 1;
+      break;
+
+    case "secret":                       // ils regardent autour d'eux, inquiets
+      a.startAction(a.has("guard") ? "guard" : "idle", 500, null);
+      b.startAction(b.has("guard") ? "guard" : "idle", 500, null);
+      a.peurT = 3000; b.peurT = 3000;
+      break;
+
+    case "culte":                        // ils se tournent vers la Force
+      a.facing = (FORCE.x >= a.x) ? 1 : -1;
+      b.facing = (FORCE.x >= b.x) ? 1 : -1;
+      if(a.has("intro")) a.startAction("intro", 700, null);
+      if(b.has("intro")) b.startAction("intro", 700, null);
+      spark(a.x, a.fy() - a.Ht*0.8, "#ffd07a", 1.2);
+      spark(b.x, b.fy() - b.Ht*0.8, "#ffd07a", 1.2);
+      break;
+
+    case "defiance":                     // il frappe dans le vide, vers la Force
+      a.facing = (FORCE.x >= a.x) ? 1 : -1;
+      a.startAction(a.pickAnim(["strong","attack"]), 0, null);
+      spark(a.x + a.facing*50, a.fy() - a.Ht*0.7, "#cc1518", 1.1);
+      shake += 2;
+      if(AUD) AUD.voix(a, "ultime", 1);
+      break;
+
     // guerre et defi : le combat qui suit EST l'acte
   }
 }
 
 var derniereScene = -99999;
 function tenteRite(a, b){
-  if(worldT - derniereScene < 13000) return false;    // on laisse respirer entre deux scenes
+  if(worldT - derniereScene < 7000) return false;     // on laisse un peu respirer entre deux scenes
   if(a.riteCd > 0 || b.riteCd > 0) return false;
   if(a.duel || b.duel || a.mode==="ko" || b.mode==="ko") return false;
   var ok = [];
@@ -1520,8 +2267,8 @@ function tenteRite(a, b){
   if(Math.random() > R.p) return false;
 
   derniereScene = worldT;
-  a.riteCd = rand(55000, 130000);
-  b.riteCd = rand(40000, 100000);
+  a.riteCd = rand(30000, 70000);
+  b.riteCd = rand(22000, 55000);
   startTalk(a, b, R.id);
   raiseEvent(riteTexte(R.txt, a, b), [a, b], null);
   return true;
@@ -1573,6 +2320,36 @@ function appliqueRite(grp){
       a.fait["admire_"+b.key] = 1;
       bouge(a,b,9); bouge(b,a,5);
       break;
+
+    case "secret":
+      // partager une peur, ca rapproche. Et ca la propage.
+      bouge(a,b,16); bouge(b,a,16);
+      b.opMain = clamp(b.opMain - 10, -100, 100);
+      logIt("🤫 " + a.name + " et " + b.name + " se sont confié leur peur.");
+      break;
+
+    case "culte":
+      bouge(a,b,20); bouge(b,a,20);
+      b.opMain = clamp(b.opMain + 12, -100, 100);
+      logIt("🙏 " + a.name + " et " + b.name + " partagent la même foi.");
+      break;
+
+    case "theorie":
+      // chercher a comprendre ensemble, ca rapproche. Et ca ancre la croyance.
+      bouge(a,b,14); bouge(b,a,14);
+      // celui qui doute le plus deteint sur l'autre : les avis convergent
+      var moyenne = (a.opMain + b.opMain) / 2;
+      a.opMain = clamp(a.opMain + (moyenne - a.opMain)*0.30, -100, 100);
+      b.opMain = clamp(b.opMain + (moyenne - b.opMain)*0.30, -100, 100);
+      logIt("❓ " + a.name + " et " + b.name + " ont parlé de la Présence.");
+      break;
+
+    case "defiance":
+      // il defie l'invisible. Il n'en sortira rien, et ca le ronge.
+      a.opMain = clamp(a.opMain - 8, -100, 100);
+      a.ame = clamp(a.ame - 0.08, -1, 1);
+      logIt("✊ " + a.name + " a défié la Présence. Elle n'a pas répondu.");
+      break;
   }
 }
 
@@ -1590,9 +2367,12 @@ function startTalk(a, b, rite){
   cx /= grp.length; zc /= grp.length;
 
   grp.turn  = 0;
-  grp.nextT = 1200;                // le temps qu'ils se rejoignent
+  grp.nextT = 900;                 // le temps qu'ils se rejoignent
   grp.script = null;               // rempli par la tete si elle repond a temps
+  grp.secours = null;              // le script en dur, garde en reserve au cas ou
   grp.wait  = 0;
+  grp.fromLLM = false;
+  grp.__meuble = false;
   grp.rite  = rite || null;        // amour / guerre / defi / betise / dispute / reconcile / admire
 
   var dur = 6500 + grp.length*2600 + Math.random()*3000;
@@ -1604,20 +2384,29 @@ function startTalk(a, b, rite){
     g.goalZ = clamp(zc + (i - (grp.length-1)/2) * 0.05, 0.18, 0.92);
     g.brainT = 60;
   }
-  // UNE SCENE NE MENT PAS : on pose tout de suite un dialogue qui correspond a
-  // ce qui a ete annonce. Si le LLM en ecrit un meilleur, il prendra le relais.
+  // On PREPARE un script de secours mais on ne l'affiche pas tout de suite : on laisse
+  // au LLM le temps d'ecrire un dialogue unique. Le secours ne sort que s'il tarde trop.
   if(rite){
-    var sec = scriptDeSecours(grp);
-    if(sec){
-      grp.script = sec; grp.si = 0;
-      // assez de temps pour TOUTES les repliques + l'acte. Sinon la scene est coupee net.
-      var d2 = 2500 + sec.length*3100 + 3500;
-      for(i=0;i<grp.length;i++) grp[i].modeT = d2;
-    }
+    grp.secours = scriptDeSecours(grp);
+    var d2 = 2500 + (grp.secours ? grp.secours.length : 4)*3100 + 3500;
+    for(i=0;i<grp.length;i++) grp[i].modeT = d2;
   }
-  if(window.KV_MIND && window.KV_MIND.prepareTalk){
-    grp.wait = window.KV_MIND.prepareTalk(grp) ? 9000 : 0;
+  // un dialogue prepare d'avance pour cette paire ? -> zero attente
+  if(window.KV_MIND && window.KV_MIND.pret){
+    var dejaPret = window.KV_MIND.pret(grp);
+    if(dejaPret){ grp.script = dejaPret; grp.si = 0; grp.fromLLM = true; grp.attenteLLM = 0; }
   }
+  var demande = false;
+  if(!grp.script && window.KV_MIND && window.KV_MIND.prepareTalk){
+    // Le LLM ecrit TOUTE la conversation. On lui laisse largement le temps : la frappe
+    // lettre par lettre nous donne ~12 s de marge, donc patienter 6-7 s avant le premier
+    // mot ne se voit pas — ils se rejoignent pendant.
+    demande = window.KV_MIND.prepareTalk(grp);
+  }
+  grp.attenteLLM = demande ? (rite ? 7000 : 6000) : 0;
+  // Pas de LLM (absent, occupe, budget serre) ? Une SCENE joue tout de suite son script
+  // ecrit a la main. Sans ca elle se rabat sur des repliques generiques et ne raconte rien.
+  if(!demande && !grp.script && rite && grp.secours){ grp.script = grp.secours; grp.si = 0; }
 }
 
 /* ================================================================ LA "TETE" (mind.js, optionnel) */
@@ -1793,6 +2582,24 @@ function drawDecor(){
   ctx.fillStyle="rgba(10,14,20,.18)";
   ctx.fillRect(vx0, vy0, vx1-vx0, vy1-vy0);
 
+  // les lieux du village
+  ctx.textAlign = "center";
+  for(var L=0; L<LIEUX.length; L++){
+    var lu = LIEUX[L];
+    if(lu.x < vx0-160 || lu.x > vx1+160) continue;
+    ctx.globalAlpha = 0.90;
+    ctx.font = "20px system-ui, sans-serif";
+    ctx.fillText(lu.ic, lu.x, -Z_SPAN/2 - 16);
+    ctx.font = "600 10px ui-monospace, Consolas, monospace";
+    ctx.fillStyle = "rgba(233,221,194,.85)";
+    ctx.fillText(lu.nom, lu.x, -Z_SPAN/2 - 3);
+    ctx.globalAlpha = 0.20;
+    ctx.fillStyle = "#e9ddc2";
+    ctx.beginPath(); ctx.ellipse(lu.x, 0, 34, 8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = "left";
+
   // en mode diagnostic : on VOIT le sol et la bande de profondeur
   if(showDiag){
     ctx.strokeStyle="rgba(255,80,80,.85)"; ctx.lineWidth=1.5/cam.z;
@@ -1819,6 +2626,10 @@ function drawFx(img, a, idx, wx, wy, K, sc, alpha, dir){
 function drawAgent(g){
   var a=g.A(g.anim);
   if(!a || !g.img.__ok) return;
+  // hors champ : inutile de le dessiner. Sa simulation, elle, continue normalement,
+  // donc rien ne se voit quand on dezoome.
+  var demiL = W/(2*cam.z) + 160;
+  if(Math.abs(g.x - cam.x) > demiL) return;
   var fi=Math.min(g.frame, a.frames.length-1), f=a.frames[fi], r=f.r;
   var ax=(f.ax==null ? r[2]/2 : f.ax);
   var ds = 0.93 + 0.13*g.z;              // leger effet de perspective
@@ -1910,9 +2721,14 @@ function drawOverlays(vis){
     if(vis.indexOf(o) < 0) continue;
     var pt=w2s(o.x, o.fy() - o.Ht*1.22);
     if(pt.x<-120 || pt.x>W+120) continue;
-    var al=Math.min(1, Math.min(b.t/160, (b.life-b.t)/300));
+    var al=Math.min(1, Math.min(b.t/120, (b.life-b.t)/300));
     ctx.font="11px ui-monospace, Consolas, monospace";
+    // la bulle garde sa taille FINALE (pas de tremblement pendant la frappe)
     var tw=ctx.measureText(b.txt).width;
+    // lettres revelees : ~26 ms par caractere, comme une frappe naturelle
+    var n = b.full ? b.txt.length : Math.floor(b.t / 26);
+    if(n >= b.txt.length){ n = b.txt.length; b.full = true; }
+    var vu = b.txt.slice(0, n);
     ctx.globalAlpha=Math.max(0, al);
     ctx.fillStyle="rgba(16,21,29,.92)";
     ctx.strokeStyle="rgba(120,140,170,.35)"; ctx.lineWidth=1;
@@ -1921,9 +2737,27 @@ function drawOverlays(vis){
     if(ctx.roundRect) ctx.roundRect(bx, by, bw2, bh2, 6); else ctx.rect(bx, by, bw2, bh2);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle="#dfe7f2";
-    ctx.fillText(b.txt, pt.x, by+14);
+    ctx.textAlign="left";
+    ctx.fillText(vu, bx+8, by+14);
+    // le curseur qui clignote pendant la frappe
+    if(!b.full && (Math.floor(b.t/380) % 2 === 0)){
+      var cw = ctx.measureText(vu).width;
+      ctx.fillStyle="rgba(232,115,28,.85)";
+      ctx.fillRect(bx+8+cw+1, by+5, 1.5, 11);
+    }
+    ctx.textAlign="center";
     ctx.globalAlpha=1;
   }
+  // l'heure
+  ctx.textAlign = "left";
+  ctx.font = "600 11px ui-monospace, Consolas, monospace";
+  var hh = Math.floor(heure), mm = Math.floor((heure - hh) * 60);
+  ctx.fillStyle = "rgba(10,13,20,.6)";
+  ctx.fillRect(10, 10, 132, 20);
+  ctx.fillStyle = nuit() ? "#8fa8e0" : "#ffd7a0";
+  ctx.fillText((nuit() ? "🌙 " : "☀ ") + (hh<10?"0":"") + hh + ":" + (mm<10?"0":"") + mm
+               + "  " + momentDuJour(), 17, 24);
+
   // diagnostic (touche D)
   if(showDiag){
     ctx.textAlign="left";
@@ -1945,6 +2779,7 @@ function drawOverlays(vis){
 /* ================================================================ BOUCLE */
 function step(dt){
   worldT += dt;
+  heure = (heure + 24 * dt / JOUR_MS) % 24;
   var i;
 
   sceneTick(dt);
@@ -2009,7 +2844,6 @@ function step(dt){
 
   ficheT += dt;
   if(ficheT > 260){ ficheT = 0; if(fiche) majFiche(); majRoster(); }
-  if(window.KV_MIND && window.KV_MIND.tick) window.KV_MIND.tick(dt);
   if(shake>0) shake = Math.max(0, shake - dt*0.03);
   if(timeScale < tsTarget) timeScale = Math.min(tsTarget, timeScale + dt*0.0016);
 }
@@ -2028,6 +2862,14 @@ function render(){
   for(var i=0;i<order.length;i++) drawAgent(order[i]);
   drawProjs();
   drawSparks();
+
+  // la lumiere du moment
+  ctx.setTransform(1,0,0,1,0,0);
+  var T = teinte();
+  if(T.a > 0.005){
+    ctx.fillStyle = "rgba(" + T.c + "," + T.a + ")";
+    ctx.fillRect(0, 0, W, H);
+  }
 
   drawOverlays(vis);
 }
@@ -2051,12 +2893,18 @@ function loop(ts){
     camTick(raw);
     step(dt);
   } else camTick(raw);
+
+  // LA TETE TOURNE TOUJOURS — meme en pause, meme pendant une scene.
+  // Ce temps d'arret est du temps de reflexion gagne : les reserves se remplissent
+  // et les conversations a venir s'ecrivent pendant qu'on regarde.
+  if(window.KV_MIND && window.KV_MIND.tick) window.KV_MIND.tick(raw);
   render();
 }
 
 /* ================================================================ MONDE */
 function build(){
   agents.length=0; projs.length=0; sparks.length=0; duels.length=0; bubbles.length=0; scene=null;
+  chronique.length=0; heure=9;
   logLines.length=0; possessed=null; camFocus=null; camMode="auto"; ev=null;
   elEvent.classList.remove("on");
   timeScale=1; tsTarget=1;
@@ -2072,6 +2920,84 @@ function build(){
   fiche = null;
   if(elFiche) elFiche.classList.remove("on");
   majRoster();
+}
+
+/* ================================================================ LA FORCE
+   Le joueur n'est pas un spectateur : c'est une PRESENCE dans leur monde.
+   Ils la voient agir, ils s'en font une opinion, et ils se comportent en consequence.
+   Rien n'est ecrit d'avance : tout depend de ce que la Force fait, partie apres partie.
+*/
+var FORCE = {
+  x: 0, y: 0,              // ou elle se manifeste (le curseur, en coordonnees monde)
+  la: false,               // est-elle presente maintenant ?
+  vue: 0,                  // depuis combien de temps sans interruption
+  actes: 0,                // combien de fois elle a agi
+  derniere: -99999
+};
+
+// La Force agit. Tout le monde qui VOIT en tire une conclusion.
+// gravite : de -1 (cruel) a +1 (bienveillant). cible : qui a subi/recu.
+function forceAgit(gravite, cible, quoi){
+  FORCE.actes++;
+  FORCE.derniere = worldT;
+  var demi = W/(2*cam.z);
+  for(var i=0;i<agents.length;i++){
+    var g = agents[i];
+    if(g.mode === "ko" && g !== cible) continue;
+    var direct = (g === cible);
+    // on ne juge que ce qu'on voit (ou ce qu'on subit)
+    if(!direct && Math.abs(g.x - cam.x) > demi + 120) continue;
+    if(!direct && Math.abs(g.x - (cible ? cible.x : FORCE.x)) > 420) continue;
+
+    var poids;
+    if(direct) poids = gravite * 7;
+    else {
+      // ce que j'en pense depend de ce que je pense de la victime
+      var lien = cible ? g.relTo(cible) : 0;
+      poids = gravite * (1.8 + Math.abs(lien)/30);
+      if(lien < -25) poids = -poids * 0.7;      // il maltraite quelqu'un que je deteste : tant mieux
+    }
+    // rendements decroissants : convaincre quelqu'un qui a deja un avis tranche est difficile.
+    // Et un avis oppose se corrige plus vite qu'il ne s'enfonce (on doute, puis on revise).
+    var op0 = g.opMain || 0;
+    var memeSens = (poids >= 0) === (op0 >= 0);
+    poids *= memeSens ? (1 - Math.abs(op0)/118) : 1.5;
+    g.opMain = clamp(op0 + poids, -100, 100);
+    if(direct && quoi) g.memMain(quoi, gravite);
+    else if(Math.abs(poids) > 3) g.memMain("vu_" + (quoi||"acte"), gravite);
+
+    // LA TETE IMPROVISE : pour la victime, et pour un temoin marque.
+    // Elle compose elle-meme la reaction ; le moteur pese ne sert que si elle est absente.
+    if(window.KV_MIND && window.KV_MIND.reagit && Math.abs(gravite) > 0.3){
+      if(direct){
+        window.KV_MIND.reagit(g, decritActe(quoi, gravite, null));
+      } else if(Math.abs(poids) > 3.5 && Math.random() < 0.45){
+        window.KV_MIND.reagit(g, decritActe(quoi, gravite, cible));
+      }
+    }
+  }
+}
+
+// ce que la victime / le temoin a vecu, en clair, pour que la tete comprenne
+function decritActe(quoi, gravite, victime){
+  var moi = !victime;
+  var qui = victime ? victime.name : "lui";
+  var D = {
+    saisi:                "une force invisible l'a saisi et soulevé de terre, puis relâché",
+    lache:                "une force invisible l'a soulevé puis lâché",
+    lache_de_haut:        "une force invisible l'a soulevé très haut et lâché — la chute a fait mal",
+    repose:               "une force invisible l'a soulevé puis reposé doucement au sol",
+    jete_sur_ennemi:      "une force invisible l'a jeté sur quelqu'un qu'il déteste, déclenchant un combat",
+    ennemi_jete_sur_moi:  "une force invisible a lâché un ennemi juste sur lui",
+    presente_a_un_ami:    "une force invisible l'a déposé auprès de quelqu'un qu'il apprécie",
+    menee_ou_il_fallait:  "une force invisible l'a porté exactement là où il avait besoin d'aller",
+    sauve_du_combat:      "une force invisible l'a arraché à un combat qu'il était en train de perdre",
+    menee_vers_un_soigneur:"une force invisible l'a porté, inconscient, jusqu'à quelqu'un capable de le soigner",
+    possede:              "une force invisible a pris le contrôle de son corps"
+  };
+  var base = D[String(quoi||"").replace(/^vu_/,"")] || "une force invisible s'est manifestée";
+  if(moi) return "À l'instant, " + base + ".";
+  return "Il vient de voir, sous ses yeux : " + qui + " — " + base + ".";
 }
 
 /* ================================================================ QUI EST LA */
@@ -2206,9 +3132,43 @@ function majFiche(){
   document.getElementById("fCk").style.background = "#3fb6ff";
   document.getElementById("fCkN").textContent = Math.round(g.ck) + "/100";
 
+  var B = [["fFaim","faim","🍜"],["fFatigue","fatigue","💤"],["fEnnui","ennui","🎯"]];
+  for(i=0;i<B.length;i++){
+    var el = document.getElementById(B[i][0]);
+    if(!el) continue;
+    var v = g[B[i][1]];
+    el.style.width = Math.round(v) + "%";
+    el.style.background = v > 75 ? "#cc1518" : (v > 50 ? "#e8731c" : "#5b6472");
+  }
+  var ea = document.getElementById("fAme");
+  if(ea){
+    ea.textContent = g.motAme();
+    ea.style.color = g.ame <= -0.5 ? "#cc1518" : (g.ame <= -0.2 ? "#e8731c"
+                   : (g.ame >= 0.5 ? "#5ad48a" : "#e8ecf2"));
+  }
+  var ef = document.getElementById("fForce");
+  if(ef){
+    var av = g.avisForce();
+    var lbl = {terreur:"terreur",peur:"peur",mefiance:"méfiance",indifference:"—",
+               curiosite:"curiosité",fascination:"fascination",devotion:"dévotion"};
+    ef.textContent = lbl[av];
+    ef.style.color = g.opMain <= -30 ? "#cc1518" : (g.opMain <= -10 ? "#e8731c"
+                   : (g.opMain >= 45 ? "#ffd07a" : "#8a93a4"));
+  }
+  var eh = document.getElementById("fHumeur");
+  if(eh){
+    var hu = Math.round(g.humeur());
+    eh.textContent = hu > 70 ? "en pleine forme" : (hu > 45 ? "ça va" : (hu > 25 ? "grognon" : "au bout du rouleau"));
+    eh.style.color = hu > 70 ? "#5ad48a" : (hu > 45 ? "#e8ecf2" : (hu > 25 ? "#e8731c" : "#cc1518"));
+  }
+
   // ce qu'il fait
   var f = "Il se balade.";
   if(g.possessed)          f = "<b style='color:#e8731c'>Tu le contrôles.</b>";
+  else if(g.faisant==="faim")    f = "Il mange à <b>" + (g.lieu?g.lieu.nom:"table") + "</b>.";
+  else if(g.faisant==="fatigue") f = "Il <b>dort</b>" + (g.lieu?" — " + g.lieu.nom : "") + ".";
+  else if(g.faisant==="ennui")   f = "Il <b>s'entraîne</b>.";
+  else if(g.mode==="besoin" && g.lieu) f = "Il va vers <b>" + g.lieu.nom + "</b> " + g.lieu.ic + ".";
   else if(g.mode==="ko")   f = "Il est à terre. Il se relève dans " + Math.max(0, Math.round((g.actDur-g.actT)/1000)) + " s.";
   else if(g.mode==="fight" && g.target)
     f = "Il se bat contre <b>" + g.target.name + "</b>."
@@ -2318,6 +3278,7 @@ function possess(g){
   g.goalX=null; g.walkT=0;
   buildLegend(g);
   document.getElementById("legend").classList.add("on");
+  forceAgit(-0.5, g, "possede");     // etre habite par la Force : troublant
   majRoster();
 }
 function release(){
@@ -2344,6 +3305,8 @@ function souris(e){
   var r = cv.getBoundingClientRect();
   return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) };
 }
+cv.addEventListener("mouseenter", function(){ FORCE.la = true;  FORCE.vue = 0; });
+cv.addEventListener("mouseleave", function(){ FORCE.la = false; FORCE.vue = 0; });
 
 cv.addEventListener("mousedown", function(e){
   var m = souris(e), wp = s2w(m.x, m.y), hitG = null;
@@ -2357,6 +3320,8 @@ cv.addEventListener("mousedown", function(e){
 
 window.addEventListener("mousemove", function(e){
   var m = souris(e);
+  var wf = s2w(m.x, m.y);
+  FORCE.x = wf.x; FORCE.y = wf.y; FORCE.la = true;
 
   // --- ON L'A DANS LA MAIN ---
   if(attrape){
@@ -2364,9 +3329,18 @@ window.addEventListener("mousemove", function(e){
       attrape.bouge = true;
       var g = attrape.g;
       g.leaveTalk();
+      if(g.duel){
+        g.__sortiDuel = true;
+        var arrD = (g.side===0) ? g.duel.A : g.duel.B;
+        var jD = arrD.indexOf(g); if(jD>=0) arrD.splice(jD,1);
+        var dD = g.duel; g.duel=null; g.side=-1; g.target=null;
+        dD.check();
+      }
       g.held = true;
       g.vx=0; g.vy=0; g.combo=null; g.st="free"; g.walkT=0; g.goalX=null;
-      g.dire("tendu", true);                       // "Hé ! Repose-moi !"
+      // se faire saisir : desagreable, sauf si on venere la Force
+      forceAgit(g.opMain > 50 ? 0.3 : -0.35, g, "saisi");
+      g.dire(g.opMain > 40 ? "content" : "tendu", true);
       if(AUD) AUD.voix(g, "effort");
       cv.style.cursor = "grabbing";
     }
@@ -2395,11 +3369,50 @@ window.addEventListener("mouseup", function(){
       // simple clic : sa fiche
       if(fiche === g) fermerFiche(); else ouvrirFiche(g);
     } else {
-      // on le lache : il tombe
+      // on le lache : la hauteur de chute decide s'il en veut a la Force
+      var haut = -g.y;                     // 0 = pose au sol, grand = lache de haut
       g.held = false;
       g.onGround = false;
       g.vy = 0;
       g.brainT = 500;
+      if(haut > 210)      forceAgit(-0.85, g, "lache_de_haut");
+      else if(haut > 90)  forceAgit(-0.35, g, "lache");
+      else                forceAgit(0.12, g, "repose");   // pose delicatement : ca compte
+      // 1. LE POSER LA OU IL A BESOIN D'ETRE : c'est le vrai geste de soin.
+      var bes = g.besoinUrgent();
+      if(bes){
+        for(var L=0; L<LIEUX.length; L++){
+          if(LIEUX[L].b === bes && Math.abs(LIEUX[L].x - g.x) < 110){
+            g.mode="besoin"; g.lieu=LIEUX[L]; g.faisant=null; g.modeT=0; g.brainT=60;
+            forceAgit(0.9, g, "menee_ou_il_fallait");        // elle a compris ce dont j'avais besoin
+            logIt("✨ La Présence a mené " + g.name + " vers " + LIEUX[L].nom + ".");
+            attrape = null; return;
+          }
+        }
+      }
+
+      // 2. LE SORTIR D'UN COMBAT PERDU : on lui sauve la mise.
+      if(g.__sortiDuel && g.hp < g.maxHp*0.45){
+        forceAgit(1.0, g, "sauve_du_combat");
+        g.__sortiDuel = false;
+      }
+
+      // 3. LE POSER PRES DE QUELQU'UN QUI PEUT LE SOIGNER
+      if(g.mode === "ko"){
+        for(var H=0;H<agents.length;H++){
+          var soigneur = agents[H];
+          if(soigneur === g || soigneur.mode === "ko") continue;
+          if(Math.abs(soigneur.x - g.x) > 130) continue;
+          var peutSoigner = false;
+          for(var Mi=0; Mi<soigneur.moves.length; Mi++)
+            if(soigneur.moves[Mi].heal && soigneur.moves[Mi].ally){ peutSoigner = true; break; }
+          if(!peutSoigner) continue;
+          forceAgit(1.0, g, "menee_vers_un_soigneur");
+          logIt("✨ La Présence a confié " + g.name + " à " + soigneur.name + ".");
+          break;
+        }
+      }
+
       // ... et si on le pose sur quelqu'un, il se passe un truc
       for(var i=0;i<agents.length;i++){
         var o = agents[i];
@@ -2408,8 +3421,11 @@ window.addEventListener("mouseup", function(){
           if(g.relTo(o) < -25 || o.relTo(g) < -25){
             g.fightCd=0; o.fightCd=0;
             startFight(g, o, "provocation");
+            forceAgit(-0.7, g, "jete_sur_ennemi");     // elle m'a jete dans un combat
+            forceAgit(-0.5, o, "ennemi_jete_sur_moi");
           } else if(!g.duel){
             startTalk(g, o);
+            forceAgit(0.45, g, "presente_a_un_ami");   // elle m'a fait rencontrer quelqu'un
           }
           break;
         }
@@ -2430,6 +3446,16 @@ cv.addEventListener("wheel", function(e){
 }, {passive:false});
 
 /* ================================================================ UI */
+var chr=document.getElementById("chron");
+var bch=document.getElementById("bchron");
+if(bch) bch.onclick = function(){
+  chr.classList.toggle("on");
+  this.classList.toggle("on", chr.classList.contains("on"));
+  if(chr.classList.contains("on")) majChronique();
+};
+var chx=document.getElementById("chronX");
+if(chx) chx.onclick = function(){ chr.classList.remove("on"); bch.classList.remove("on"); };
+
 var cog=document.getElementById("cog");
 if(cog) cog.onclick = function(){
   var r=document.getElementById("reg");
@@ -2486,13 +3512,47 @@ window.KV_WORLD = {
   cam:cam, LARG:W,
   step:step, build:build, startFight:startFight,
   find:findAgent, applyIntent:applyIntent, log:logIt,
+  moment:momentDuJour,
+  // la Force : expose pour les tests et pour la camera (a venir)
+  FORCE:FORCE, forceAgit:forceAgit,
+  // la tete compose une suite de gestes pour un ninja
+  poserSuite:function(g, seq){ return g && g.poserSuite ? g.poserSuite(seq) : false; },
+  LIEUX:LIEUX,
   // la tete depose le dialogue qu'elle a ecrit
+  // le LLM ecrit en direct : chaque replique arrive des qu'elle est prete.
+  // La conversation DEMARRE des la premiere, sans attendre les autres.
+  pushLine:function(grp, ligne){
+    if(!grp || !ligne || !ligne.dit) return false;
+    if(grp.__acte) return false;
+    if(!grp.fromLLM){
+      // premiere replique du LLM : on jette le secours et on demarre tout de suite
+      grp.script = [];
+      grp.si = 0;
+      grp.fromLLM = true;
+      grp.attenteLLM = 0;
+      grp.nextT = Math.min(grp.nextT, 120);
+    }
+    grp.script.push(ligne);
+    grp.__flux0 = 0;              // une replique vient d'arriver : on repart pour un tour
+    var dur = 2500 + grp.script.length * 3100 + (grp.rite ? 3500 : 0);
+    for(var i=0;i<grp.length;i++) if(grp[i].mode==="talk") grp[i].modeT = Math.max(grp[i].modeT, dur);
+    return true;
+  },
+
   setScript:function(grp, script){
     if(!grp || !script || !script.length) return false;
-    if(grp.__acte) return false;                 // trop tard, la scene est jouee
-    if(grp.si > 1) return false;                 // on est deja lance : on ne coupe pas
-    grp.script = script; grp.si = 0; grp.wait = 0;
-    var dur = 2500 + script.length * 3100 + (grp.rite ? 3500 : 0);
+    if(grp.__acte) return false;                 // trop tard, l'acte est joue
+    if(grp.fromLLM) return false;                // deja ecrit par le LLM : on ne rechange pas
+    // Cas normal : rien n'est encore affiche, on installe le dialogue du LLM.
+    // Cas limite (le secours a demarre) : on greffe la suite sans repeter l'affiche.
+    var depart = Math.min(grp.si || 0, script.length);
+    if(depart > 0 && grp.script){
+      grp.script = grp.script.slice(0, depart).concat(script.slice(depart));
+    } else {
+      grp.script = script; grp.si = 0;
+    }
+    grp.fromLLM = true; grp.wait = 0; grp.attenteLLM = 0;
+    var dur = 2500 + grp.script.length * 3100 + (grp.rite ? 3500 : 0);
     for(var i=0;i<grp.length;i++) if(grp[i].mode==="talk") grp[i].modeT = dur;
     return true;
   },

@@ -76,7 +76,10 @@ window.KV_SOCIAL = (function(){
     sakura:    {social:.80, loyal:.95, calme:.35},
     kakashi:   {social:.60, loyal:.90, calme:.80},
     jiraiya:   {social:.85, loyal:.90, calme:.55},
-    orochimaru:{social:.35, loyal:.10, calme:.60},
+    orochimaru:{
+      ennui:["Rien d'intéressant.","Autant expérimenter.","Kukuku… je m'ennuie."],
+      fatigue:["Ce corps est usé.","Je dois me régénérer.","Fatigue… détestable."],
+      faim:["Ce corps réclame.","Une faiblesse humaine.","Kukuku… je mangerai."],social:.35, loyal:.10, calme:.60},
     pain:      {social:.20, loyal:.60, calme:.85},
     deidara:   {social:.55, loyal:.35, calme:.20},
     konan:     {social:.30, loyal:1.00, calme:.75},
@@ -95,6 +98,9 @@ window.KV_SOCIAL = (function(){
   //   content = il vient de gagner / d'etre soigne
   var LINES = {
     naruto:{
+      ennui:["Y'a rien à faire ici.","Quelqu'un veut se battre ?","J'm'ennuie à mourir.","Bon, je m'entraîne."],
+      fatigue:["Chuis crevé…","Cinq minutes. Juste cinq.","Zzz…","J'dors debout, là."],
+      faim:["J'AI FAIM !","Des ramen. Tout de suite.","Mon ventre parle tout seul.","Ichiraku me manque."],
       seul:["J'ai la dalle.","Un jour, Hokage. Croyez-moi.","Ero-sennin m'a encore planté.",
             "Ça sent le ramen quelque part.","J'suis pas fatigué. Pas du tout.",
             "Personne me regarde ? Bon.","Faut que je m'entraîne.","Dattebayo !",
@@ -107,6 +113,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ça… ça va.","J'suis pas encore à terre.","Faut que je tienne."],
       content:["OUAIS !","Je vous l'avais dit !","Ramen pour tout le monde !"]},
     sasuke:{
+      ennui:["Perte de temps.","Je m'entraîne.","Rien ne se passe ici."],
+      fatigue:["Je devrais dormir.","...","Fatigué. Peu importe."],
+      faim:["Des tomates feraient l'affaire.","J'ai faim. Tant pis.","Hn."],
       seul:["Hn.","Perte de temps.","Je ne suis pas assez fort.","...",
             "Il me faut plus de puissance.","Tsss.","Ce village m'insupporte.",
             "Encore du bruit.","Je le tuerai."],
@@ -116,6 +125,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ce n'est rien.","Je tiens encore debout.","Pas comme ça."],
       content:["Évidemment.","C'était prévisible.","Suivant."]},
     itachi:{
+      ennui:["Le silence me convient.","Rien à faire.","Je vais m'exercer."],
+      fatigue:["Mon corps me lâche.","Je dois me reposer.","..."],
+      faim:["Des dango.","Je devrais manger.","Peu importe."],
       seul:["Le monde est vaste.","Tu es encore faible, Sasuke.","Mes yeux me font mal.",
             "Il ne reste plus beaucoup de temps.","...","Les corbeaux sont fidèles.",
             "Je n'attends aucun pardon."],
@@ -125,6 +137,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ce n'est pas toi qui m'abats.","Mon corps me lâche.","Peu importe."],
       content:["C'était nécessaire.","Rien de plus.","Relève-toi."]},
     sakura:{
+      ennui:["Je m'ennuie.","Autant m'entraîner.","Il ne se passe rien."],
+      fatigue:["Épuisée…","Je vais faire une pause.","Mes jambes lâchent."],
+      faim:["Je meurs de faim.","Un anmitsu, ce serait parfait.","J'ai sauté le repas."],
       seul:["Shannaro !","J'ai encore progressé, je le sens.","Sasuke-kun…",
             "Faut que je révise mes soins.","Naruto va encore faire une bêtise.",
             "Mes cheveux, quelle galère.","Tsunade-sama serait fière."],
@@ -135,6 +150,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ça… c'est rien.","Je peux encore me soigner.","Tenir. Juste tenir."],
       content:["SHANNARO !","Je vous l'avais dit !","Facile."]},
     kakashi:{
+      ennui:["Mon bouquin m'attend.","Je vais m'entraîner un peu.","Rien à signaler."],
+      fatigue:["Une sieste s'impose.","Je vais m'allonger.","Zzz."],
+      faim:["Un thé et je repars.","J'ai un petit creux.","On mange ?"],
       seul:["Désolé, je me suis perdu sur le chemin de la vie.","Ce bouquin est excellent.",
             "Ils progressent, ces gamins.","Encore en retard. Tant pis.",
             "Obito…","Un thé serait pas de refus.","Mon œil me fatigue."],
@@ -144,6 +162,9 @@ window.KV_SOCIAL = (function(){
       blesse:["J'ai connu pire.","Ça va aller.","Je vieillis."],
       content:["Bon travail.","Vous voyez ?","Rentrons."]},
     jiraiya:{
+      ennui:["Il me faut de l'inspiration.","Bon. À l'entraînement.","Rien ne bouge ici."],
+      fatigue:["Le vieux corps réclame.","Une sieste, et je repars.","Je me repose."],
+      faim:["Un bon repas et de la compagnie !","J'ai une faim de crapaud.","À table !"],
       seul:["L'ermite des crapauds !","J'écris un roman, tu sais.","Il me faut de l'inspiration.",
             "Ce gamin ira loin.","Une source thermale, ce serait bien.",
             "Le talent, ça se travaille.","Nagato…"],
@@ -162,6 +183,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ce corps est usé.","J'en changerai.","Pathétique."],
       content:["Kukuku… évidemment.","Comme prévu.","Suivant."]},
     pain:{
+      ennui:["Le monde attend.","Rien ne change.","..."],
+      fatigue:["Nagato est fatigué.","Repos.","..."],
+      faim:["Ce corps a des besoins.","Je mangerai.","..."],
       seul:["La douleur t'apprendra.","Ce monde doit changer.","Je suis un dieu.",
             "Nagato voit tout.","La paix passe par la souffrance.","Konan…","Ils ne comprennent pas."],
       detendu:["Tu comprends, toi.","Reste près de moi.","Le monde changera.","..."],
@@ -169,6 +193,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Cette enveloppe est fragile.","Je reviendrai.","La douleur… je la connais."],
       content:["Voilà la douleur.","Tu comprends maintenant ?","Le monde apprendra."]},
     deidara:{
+      ennui:["Il me faut du public, hm.","Je vais faire péter un truc.","On s'ennuie ici."],
+      fatigue:["Crevé, hm…","Je pionce.","L'art peut attendre."],
+      faim:["J'ai la dalle, hm.","Un truc à manger, vite.","Mon art attendra."],
       seul:["L'art est une explosion, hm !","Katsu…","Il me faut plus d'argile.",
             "L'art est éphémère, hm.","Cet Itachi me sort par les yeux.","Personne ne comprend l'art."],
       detendu:["L'art est une explosion, hm !","Regarde bien, hm.","Tu vas adorer.",
@@ -177,6 +204,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ça pique, hm…","Pas fini.","Je vais exploser… littéralement."],
       content:["KATSU !","L'art a gagné, hm !","Voilà ce qu'est l'art."]},
     konan:{
+      ennui:["Rien ne se passe.","...","J'attends."],
+      fatigue:["Je vais me reposer.","...","Le papier aussi se fatigue."],
+      faim:["Je devrais manger.","...","Un repas rapide."],
       seul:["Nagato a raison.","Le papier ne ment pas.","...",
             "Yahiko me manque.","La pluie tombe encore.","Il faut protéger Nagato."],
       detendu:["Reste près de moi.","Le papier ne ment pas.","...","Fais attention."],
@@ -184,6 +214,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Le papier se déchire.","Ça ira.","Nagato…"],
       content:["C'est terminé.","Nagato sera fier.","..."]},
     sai:{
+      ennui:["Je vais dessiner.","Rien à faire. Je m'entraîne.","L'ennui. J'ai lu que c'était normal."],
+      fatigue:["Mon corps réclame du sommeil.","Je vais m'allonger.","Fatigue. Intéressant."],
+      faim:["Mon corps réclame du carburant.","J'ai lu qu'il fallait manger. Je mange.","Faim. Voilà."],
       seul:["J'ai lu que sourire créait du lien. Je sourirai.","Je dessine.",
             "Les émotions, c'est compliqué.","Mon frère aimait dessiner.",
             "J'ai lu un livre sur l'amitié. Je n'ai rien compris.","Bonjour, moi-même."],
@@ -194,6 +227,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Ma peinture coule.","Ce n'est pas grave.","Intéressant, la douleur."],
       content:["J'ai gagné. Dois-je sourire ?","C'était logique.","Je vais le dessiner."]},
     shikamaru:{
+      ennui:["Galère…","Bon. J'm'entraîne. À contrecœur.","Les nuages, au moins, bougent."],
+      fatigue:["Je vais dormir. Enfin.","Une sieste. Enfin une bonne idée.","Zzz…"],
+      faim:["J'ai faim. Galère.","Un truc rapide.","Manger, c'est du boulot."],
       seul:["Galère…","Les nuages sont mieux que vous.","Trop chiant.",
             "J'ai 200 coups d'avance. Et j'm'ennuie.","Une clope serait pas de refus.",
             "Asuma-sensei…","Pourquoi je me lève le matin, déjà ?","Réfléchir, c'est fatigant."],
@@ -203,6 +239,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Aïe. Galère.","J'avais prévu ça. Pas comme ça, mais bon.","Trop chiant."],
       content:["Voilà. Galère.","J'avais 200 coups d'avance.","On peut aller dormir ?"]},
     suigetsu:{
+      ennui:["Quelqu'un veut se battre ?","J'm'ennuie ferme.","Bwahaha… non, rien."],
+      fatigue:["Crevé.","Je me liquéfie de fatigue.","Une sieste, et je reviens."],
+      faim:["J'AI SOIF. Et faim.","De l'eau. Beaucoup d'eau.","On bouffe ?"],
       seul:["Bwahaha !","J'ai soif.","Ça coupe bien, ce truc.",
             "Karin me tape sur le système.","Faut que je retrouve les 7 épées.",
             "Zabuza aurait aimé ça.","J'me liquéfie d'ennui."],
@@ -212,6 +251,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Je me reconstitue, t'inquiète.","De l'eau… vite.","Ça pique."],
       content:["BWAHAHA !","Facile !","Encore un pour la collection."]},
     karin:{
+      ennui:["Il ne se passe RIEN.","Sasuke, où t'es ?","Je m'ennuie."],
+      fatigue:["Je suis crevée.","Personne me demande si ça va.","Je vais dormir. Enfin."],
+      faim:["J'ai FAIM, quelqu'un m'écoute ?","Personne pour me nourrir ?","Je meurs de faim."],
       seul:["SASUKEEE !","Suigetsu me sort par les yeux.","Je sens tout le monde à 3 km.",
             "Personne me remercie jamais.","Sasuke m'a regardée. Enfin je crois.",
             "J'ai encore mal au bras.","Pourquoi je reste avec ces débiles ?"],
@@ -221,6 +263,9 @@ window.KV_SOCIAL = (function(){
       blesse:["Aïe ! Ça fait MAL !","Quelqu'un ? Non ? Super.","Sasuke, aide-moi !"],
       content:["ÉVIDEMMENT !","Tu m'as vue, Sasuke ?","Facile, franchement."]},
     jugo:{
+      ennui:["Les oiseaux sont partis.","...","Ça monte quand je m'ennuie."],
+      fatigue:["Je vais dormir. Ça me calme.","...","Fatigué."],
+      faim:["J'ai faim.","...","Il faut que je mange."],
       seul:["...","Je ne veux blesser personne.","Ça monte…",
             "Kimimaro…","Les oiseaux me parlent.","Restez loin de moi.","Je dois me contrôler."],
       detendu:["...","Je ne veux blesser personne.","Tu n'as pas peur de moi ?",
@@ -235,7 +280,9 @@ window.KV_SOCIAL = (function(){
   // "canon"  : les liens du manga, en dur
   // "tiedes" : le canon divise par 2,5 + du hasard -> tout peut evoluer  [defaut]
   // "neutres": tout le monde part de zero, rien n'est ecrit
-  var DEPART = "tiedes";
+  // "neutres" par defaut : PERSONNE ne se connait au depart. Tout se construit en jouant,
+  // et deux parties ne se ressemblent pas.
+  var DEPART = "neutres";
 
   return {
     CAMP:CAMP, TRAITS:TRAITS, LINES:LINES, SPARK:SPARK,
@@ -252,7 +299,7 @@ window.KV_SOCIAL = (function(){
         v = CAMP_REL[k]!=null ? CAMP_REL[k] : -20;
       }
       if(DEPART === "canon")   return v;
-      if(DEPART === "neutres") return Math.round((Math.random()-0.5)*30);
+      if(DEPART === "neutres") return Math.round((Math.random()-0.5)*16);
       // tiedes : personne n'est verrouille, tout se construit en jouant
       return Math.round(v/2.5 + (Math.random()-0.5)*30);
     },

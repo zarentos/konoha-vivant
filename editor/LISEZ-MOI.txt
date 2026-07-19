@@ -1,0 +1,30 @@
+ATELIER D'ANIMATIONS — mode d'emploi
+
+Ouvre editor/index.html (double-clic).
+
+=== RÉPARER UN PERSO DÉJÀ FAIT (le plus simple) ===
+Bouton "📂 Reprendre un .js" (en bas à droite) -> choisis src/data/<perso>.js
+-> TOUTES ses animations apparaissent, prêtes à corriger.
+Pour chaque frame tu peux :
+  - la sélectionner (clic sur la scène) et la déplacer (ancrage au sol)
+  - "✂ re-découper cette frame" (en bas) -> retrace son cadre sur la planche
+  - la réordonner (glisse-la parmi les autres frames)
+  - régler la vitesse de l'anim ("vitesse … img/s" en haut)
+  - supprimer / dupliquer / ajouter des frames
+Puis "Enregistrer ce perso" -> tu remets les 2 fichiers dans le jeu.
+
+=== DÉCOUPER / CORRIGER DES PIÈCES ===
+Bouton "✂ découper" -> la planche s'affiche. Cadres BLEUS = découpes existantes.
+  🪄 Baguette          : clique un morceau, ça isole le bloc tout seul.
+  ▭ Nouveau rectangle : trace une zone à la main, même par-dessus une découpe.
+  ✎ Corriger          : clique un cadre bleu -> re-trace -> "↻ remplacer".
+
+=== MONTER UNE ANIMATION DE ZÉRO ===
+1. Choisis un perso.  2. À DROITE : nom -> "+".  (✎ renommer, ✕ supprimer)
+3. À GAUCHE : clique une pièce pour la poser. Glisse, ou flèches (Maj = par 10).
+4. En bas : x / y / échelle / miroir. "devant"/"derrière" = empilement.
+5. "+ ajouter une frame" ou "dupliquer". Glisse les frames pour les réordonner.
+6. "👻 calquer la frame d'avant" = frame précédente en transparent. ▶/Espace = aperçu.
+
+=== ENREGISTRER ===
+-> <perso>.js (dans src/data/) + <perso>_anim.png (dans assets/) + <perso>_control.json (à m'envoyer)

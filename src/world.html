@@ -42,9 +42,9 @@
       </label>
       <label>Relations
         <select id="depart">
+          <option value="neutres">Inconnus (tout se construit)</option>
           <option value="tiedes">Tièdes</option>
-          <option value="canon">Canon</option>
-          <option value="neutres">Neutres</option>
+          <option value="canon">Canon (liens du manga)</option>
         </select>
       </label>
       <label>Tension
@@ -77,11 +77,23 @@
       </div>
       <div class="jauge"><span>PV</span><div class="tr"><i id="fPv"></i></div><b id="fPvN">—</b></div>
       <div class="jauge"><span>Chakra</span><div class="tr"><i id="fCk"></i></div><b id="fCkN">—</b></div>
+      <h5>Ce que la vie a fait de lui — <i id="fAme" style="font-style:normal">—</i></h5>
+      <div style="color:#8a93a4;margin-bottom:4px">Face à toi : <b id="fForce" style="font-weight:400">—</b></div>
+      <h5>Ce qu'il ressent — <i id="fHumeur" style="font-style:normal">—</i></h5>
+      <div class="jauge"><span>🍜 Faim</span><div class="tr"><i id="fFaim"></i></div></div>
+      <div class="jauge"><span>💤 Fatigue</span><div class="tr"><i id="fFatigue"></i></div></div>
+      <div class="jauge"><span>🎯 Ennui</span><div class="tr"><i id="fEnnui"></i></div></div>
       <h5>Ce qu'il fait</h5>      <div id="fFait">—</div>
       <h5>Ce qu'il pense</h5>     <div id="fPense">—</div>
       <h5>Ce dont il se souvient</h5><div id="fMem">—</div>
       <h5>Ses techniques</h5>     <div id="fTech">—</div>
       <button id="fPoss" class="btn">Prendre le contrôle</button>
+    </div>
+
+    <div id="chron">
+      <button id="chronX">✕</button>
+      <h4>La chronique</h4>
+      <div id="chronList"></div>
     </div>
 
     <div id="log"></div>
@@ -104,6 +116,7 @@
     <button id="follow" class="btn on">Suivre l'action</button>
     <button id="wide" class="btn">Vue large</button>
     <div class="grow"></div>
+    <button id="bchron" class="btn">📜 Chronique</button>
     <button id="reset" class="btn">↻ Nouveau monde</button>
     <button id="cog" class="btn">⚙ Réglages</button>
   </div>

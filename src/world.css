@@ -158,3 +158,20 @@ body{background:radial-gradient(1200px 700px at 50% -10%,#1b2331 0%,var(--ink) 6
 #fTech .t.pret u{color:var(--orange2)}
 #fPoss{width:100%;margin-top:13px;background:var(--orange);border-color:var(--orange2);color:#12161d}
 #fPoss:hover{background:var(--orange2)}
+
+/* ---------- la chronique ---------- */
+#chron{position:absolute;top:12px;right:12px;width:300px;display:none;z-index:6;
+  background:rgba(16,20,29,.97);border:1px solid var(--line);border-top:3px solid var(--parch2);
+  border-radius:12px;padding:13px;box-shadow:0 24px 70px rgba(0,0,0,.75);backdrop-filter:blur(4px)}
+#chron.on{display:block}
+#chron h4{font-family:var(--titre);font-size:11px;letter-spacing:1.3px;text-transform:uppercase;
+  color:var(--parch2);margin:0 0 9px;font-weight:400}
+#chronX{position:absolute;top:8px;right:9px;background:none;border:0;color:var(--dim);
+  font-size:14px;cursor:pointer;line-height:1;padding:2px 4px}
+#chronX:hover{color:var(--orange)}
+#chronList{max-height:400px;overflow-y:auto;font-family:var(--mono);font-size:11px;line-height:1.75}
+#chronList::-webkit-scrollbar{width:5px}
+#chronList::-webkit-scrollbar-thumb{background:var(--plate2);border-radius:4px}
+#chronList div{color:var(--txt);padding:3px 0;border-bottom:1px dotted #262d3a}
+#chronList em{color:var(--orange2);font-style:normal;margin-right:8px;font-size:10px}
+.jauge span{width:66px}

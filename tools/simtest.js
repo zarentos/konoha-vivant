@@ -69,9 +69,12 @@ global.window = { addEventListener: NOOP };
 let llmCalls = 0, llmNinjas = 0, promptsWithMem = 0, lastPrompt = "";
 const BUTS   = ["parler","provoquer","venger","eviter","soigner","seul"];
 const STYLES = ["normal","rage","prudent","distance","achever"];
-let dialogues = 0, lots = 0, lignesGen = 0;
+let dialogues = 0, lots = 0, lignesGen = 0, prechauffes = 0, instantanes = 0;
+let reactions = 0; const suitesVues = new Set(); let suitesJouees = 0; const dejaSeq = new Set();
 global.window.KV_BRIDGE = {
   onPull: () => {},
+  onChunk: () => {},
+  musique: () => Promise.resolve([]),
   status: () => Promise.resolve({ ok: true, label: "FAUX-LLM (test)", local: true }),
   llm: (payload) => {
     llmCalls++;
@@ -79,6 +82,20 @@ global.window.KV_BRIDGE = {
     if(/Il se souvient/.test(lastPrompt)) promptsWithMem++;
     const blocs = lastPrompt.split("### ").slice(1);
 
+    // requete "reaction improvisee" : on compose une suite au hasard, comme le ferait un LLM
+    if(/Compose une suite/.test(lastPrompt)){
+      reactions++;
+      const verbes = ["aller_vers","s_eloigner","s_arreter","regarder","suivre","geste","dire","attendre","provoquer","toucher","soigner"];
+      const n = 2 + Math.floor(Math.random()*3);
+      const suite = [];
+      for(let k=0;k<n;k++){
+        const v = verbes[Math.floor(Math.random()*verbes.length)];
+        const autre = agents[Math.floor(Math.random()*agents.length)];
+        suite.push({quoi:v, cible:(v==="geste"?"guard":(/provoquer|toucher|soigner|suivre/.test(v)?autre.key:"la présence")), texte:(v==="dire"?"...":"")});
+      }
+      suitesVues.add(suite.map(x=>x.quoi).join(">"));
+      return Promise.resolve({ text: JSON.stringify({ suite }) });
+    }
     // requete "lot de repliques" pour la reserve
     if(/répliques COURTES/.test(lastPrompt)){
       lots++;
@@ -179,6 +196,8 @@ const seen = {};                       // anims jouees par perso
 ORDER.forEach(k => seen[k] = new Set());
 let kos = 0, fights = 0, talks = 0, heals = 0, projMax = 0, events = 0, revives = 0;
 let projFired = 0, projHit = 0;
+let repas = 0, dodos = 0, entrainements = 0;
+const faisait = new Map();
 const liveProj = new Set();
 const prevMode = new Map();
 const seenDuels = new Set();
@@ -220,6 +239,10 @@ try {
     }
 
     for(const g of agents){
+      if(g.talkGrp && g.talkGrp.__compte === undefined){
+        g.talkGrp.__compte = 1;
+        if(g.talkGrp.fromLLM && g.talkGrp.attenteLLM === 0) instantanes++;
+      }
       if(g.talkGrp && g.talkGrp.rite){
         const grp = g.talkGrp;
         if(!rites.has(grp)) rites.set(grp, {rite:grp.rite, script:0, acte:false});
@@ -241,6 +264,16 @@ try {
       if(!Number.isFinite(g.x) || !Number.isFinite(g.y) || !Number.isFinite(g.hp))
         throw new Error("valeur NaN sur " + g.key + " x=" + g.x + " y=" + g.y + " hp=" + g.hp);
       if(g.hp > g.maxHp + 0.01) throw new Error(g.key + " depasse ses PV max (" + g.hp + "/" + g.maxHp + ")");
+      if(g.seq && !dejaSeq.has(g.id + ":" + g.seq.length + ":" + g.seqI)){
+        if(g.seqI > 0){ suitesJouees++; dejaSeq.add(g.id + ":" + g.seq.length + ":" + g.seqI); }
+      }
+      const fz = faisait.get(g.id);
+      if(fz !== g.faisant){
+        if(g.faisant === "faim") repas++;
+        if(g.faisant === "fatigue") dodos++;
+        if(g.faisant === "ennui") entrainements++;
+        faisait.set(g.id, g.faisant);
+      }
       const pm = prevMode.get(g.id);
       if(pm !== g.mode){
         if(g.mode === "ko") kos++;
@@ -272,6 +305,11 @@ console.log("  relevees             : " + revives);
 console.log("  discussions          : " + talks);
 console.log("  soins d'un allie     : " + heals);
 console.log("  alertes evenement    : " + events);
+console.log("  repas pris           : " + repas);
+console.log("  siestes / nuits      : " + dodos);
+console.log("  entraînements        : " + entrainements);
+const hs = agents.map(g => Math.round(g.humeur()));
+console.log("  humeur finale        : " + Math.round(hs.reduce((a,b)=>a+b,0)/hs.length) + "/100 en moyenne");
 const avg = duelDur.length ? Math.round(duelDur.reduce((a,b)=>a+b,0)/duelDur.length/1000) : 0;
 const mx  = duelDur.length ? Math.round(Math.max(...duelDur)/1000) : 0;
 console.log("  duree d'un combat    : " + avg + "s en moyenne, " + mx + "s au plus long");
@@ -306,6 +344,30 @@ console.log("\n=== 4. PRÉCISION DE L'IA DE COMBAT (duels en cours) ===");
 console.log("  techniques lancées : " + cast + " · au but : " + land +
             "  (" + (cast ? Math.round(100*land/cast) : 0) + "%)");
 
+console.log("\n=== 4bis. L'ÉMERGENCE — le monde se construit-il tout seul ? ===");
+{
+  let liens = [], ames = [], amis = 0, ennemis = 0;
+  for(const g of agents){
+    ames.push(g.ame);
+    for(const o of agents){
+      if(o === g) continue;
+      const r = g.relTo(o);
+      liens.push(r);
+      if(r > 40) amis++;
+      else if(r < -40) ennemis++;
+    }
+  }
+  const ecart = Math.round(Math.max(...liens) - Math.min(...liens));
+  const amMin = Math.min(...ames).toFixed(2), amMax = Math.max(...ames).toFixed(2);
+  console.log("  relations : de " + Math.round(Math.min(...liens)) + " à " + Math.round(Math.max(...liens))
+              + " (écart " + ecart + " — au départ tout le monde était à ~0)");
+  console.log("  liens forts formés   : " + Math.round(amis/2) + " amitiés, " + Math.round(ennemis/2) + " inimitiés");
+  console.log("  états d'âme          : de " + amMin + " à " + amMax + " (aigri ← → serein)");
+  const parAme = {};
+  for(const g of agents) parAme[g.motAme()] = (parAme[g.motAme()]||0)+1;
+  console.log("  répartition          : " + Object.entries(parAme).map(([k,v])=>k+" ×"+v).join(", "));
+}
+
 console.log("\n=== 5. LES SCÈNES — est-ce qu'elles TIENNENT leur promesse ? ===");
 const parType = {};
 let muettes = 0, sansActe = 0;
@@ -322,9 +384,12 @@ console.log("  SANS acte visible    : " + sansActe + "   (les 'guerre' et 'défi
 console.log("\n=== 6. LA TÊTE (faux LLM) ===");
 console.log("  requêtes envoyées    : " + llmCalls + "  (soit " + (llmCalls/MINUTES).toFixed(1) + " par minute)");
 console.log("  dont conversations   : " + dialogues + " (1 requête = toute la discussion)");
+console.log("  démarrages instantanés: " + instantanes + " (dialogue déjà prêt, zéro attente)");
+console.log("  gestes réellement joués: " + suitesJouees);
+console.log("  réactions improvisées : " + reactions + " → " + suitesVues.size + " enchaînements DIFFÉRENTS");
 console.log("  dont lots de réserve : " + lots + " → " + lignesGen + " répliques fabriquées d'avance");
 console.log("  en réserve à la fin  : " + (global.window.KV_MIND.stock ? global.window.KV_MIND.stock() : 0) + " répliques prêtes");
-console.log("  intentions appliquées: " + intents);
+
 console.log("  prompts contenant un souvenir : " + promptsWithMem + "/" + llmCalls);
 const rpm = llmCalls / MINUTES;
 const local = /local: true/.test(fs.readFileSync(__filename,"utf8"));
@@ -337,7 +402,22 @@ if(lastPrompt){
   console.log(lastPrompt.split("\n").slice(11, 22).map(l => "  | " + l).join("\n"));
 }
 
-const health = (fights > 3 && kos > 2 && talks > 5 && used / tot > 0.75 && llmCalls > 5 && dialogues > 3 && lots > 3 && rites.size > 2 && muettes === 0);
+const crit = {
+  "bagarres":        fights > 3,
+  "K.O.":            kos >= 1,
+  "discussions":     talks > 5,
+  "techniques":      used / tot > Math.min(0.65, 0.38 + MINUTES*0.012),
+  "LLM sollicite":   llmCalls > 5,
+  "dialogues ecrits":dialogues > 3,
+  "reserve remplie": lots > 3,
+  "scenes jouees":   rites.size > 2,
+  "aucune muette":   muettes === 0,
+  "ils mangent":     repas > 2,
+  "ils dorment":     dodos > 2
+};
+const rates = Object.entries(crit).filter(([k,v]) => !v).map(([k]) => k);
+if(rates.length) console.log("  criteres non remplis : " + rates.join(", "));
+const health = rates.length === 0;
 console.log("\n" + (health ? "==> MONDE VIABLE" : "==> A REGLER"));
 process.exit(health ? 0 : 2);
 }

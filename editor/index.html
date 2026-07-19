@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konoha — Atelier d'animations</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- COLONNE 1 : personnages + pièces -->
+  <aside id="left">
+    <div class="hd"><b>Konoha</b> · Atelier</div>
+
+    <select id="perso"></select>
+
+    <div class="search">
+      <input id="pieceSearch" placeholder="filtrer…" autocomplete="off">
+      <button id="cutBtn" class="tb" title="Découper une nouvelle pièce sur la planche">✂ découper</button>
+    </div>
+    <div class="pcount"><span id="pieceCount">—</span></div>
+    <div id="pieces"></div>
+  </aside>
+
+  <!-- COLONNE 2 : la scène de montage -->
+  <main id="center">
+    <div id="toolbar">
+      <button id="tPlay" class="tb" title="Aperçu (Espace)">▶</button>
+      <span class="fps" title="Vitesse de l anim sélectionnée">vitesse <input id="fps" type="number" min="1" max="30" value="8"> img/s</span>
+      <span class="sep"></span>
+      <button id="tDup" class="tb" title="Dupliquer la frame">⧉ dupliquer</button>
+      <button id="tDel" class="tb" title="Supprimer la pièce sélectionnée (Suppr)">🗑 pièce</button>
+      <span class="sep"></span>
+      <button id="tOnion" class="tb" title="Superpose la frame d'avant en transparent, pour bien caler la suivante">👻 calquer la frame d'avant</button>
+      <label class="chk"><input type="checkbox" id="tGrid" checked> sol</label>
+      <span class="grow"></span>
+      <span id="hint">clic sur une pièce à gauche pour l'ajouter</span>
+    </div>
+
+    <div id="stageWrap">
+      <canvas id="stage" width="900" height="640"></canvas>
+    </div>
+
+    <div id="props">
+      <span class="pk">pièce :</span> <span id="pSel">aucune</span>
+      <label>x <input id="pX" type="number" step="1"></label>
+      <label>y <input id="pY" type="number" step="1"></label>
+      <label>éch. <input id="pScale" type="number" step="0.05" value="1"></label>
+      <label class="chk"><input type="checkbox" id="pFlip"> miroir</label>
+      <button id="pUp" class="tb" title="Passer devant">▲ devant</button>
+      <button id="pDown" class="tb" title="Passer derrière">▼ derrière</button>
+      <button id="reimp" class="tb" style="display:none" title="Retracer le cadre de cette frame sur la planche">✂ re-découper cette frame</button>
+    </div>
+  </main>
+
+  <!-- COLONNE 3 : animations + frames -->
+  <aside id="right">
+    <div class="hd">Animations</div>
+    <div id="animList"></div>
+    <div class="addAnim">
+      <input id="newAnim" placeholder="nouvelle anim (ex: chidori)" autocomplete="off">
+      <button id="addAnim">+</button>
+    </div>
+
+    <div class="hd" style="margin-top:14px">Frames <span id="frameCount"></span></div>
+    <div id="frames"></div>
+    <button id="addFrame" class="wide">+ ajouter une frame</button>
+
+    <div class="hd" style="margin-top:14px">Export</div>
+    <div class="expBtns">
+      <button id="save" class="wide primary">💾 Enregistrer ce perso</button>
+      <button id="loadFile" class="wide">📂 Reprendre un .js</button>
+      <input id="fileInput" type="file" accept=".js,.json" hidden>
+    </div>
+    <div id="saveMsg"></div>
+  </aside>
+
+</div>
+
+<!-- ATELIER DE DÉCOUPE : on isole des pièces directement sur la planche -->
+<div id="cutter">
+  <div id="cutBar">
+    <b>Découpe — <span id="cutPerso"></span></b>
+    <span class="sep"></span>
+    <button id="cutMagic" class="tb on" title="Clic sur un morceau : ça isole le bloc tout seul">🪄 Baguette</button>
+    <button id="cutRect" class="tb" title="Trace un rectangle à la main, même par-dessus une découpe existante">▭ Nouveau rectangle</button>
+    <button id="cutFix" class="tb" title="Clique un cadre bleu pour ajuster une découpe déjà faite">✎ Corriger une découpe</button>
+    <span class="sep"></span>
+    <span class="cfps">zoom <input id="cutZoom" type="range" min="0.5" max="4" step="0.25" value="1"></span>
+    <span class="grow"></span>
+    <span id="cutHint">clique sur un morceau de la planche pour l'isoler</span>
+    <button id="cutClose" class="tb">✕ fermer</button>
+  </div>
+  <div id="cutScroll"><canvas id="cutCv"></canvas></div>
+  <div id="cutFoot">
+    <span id="cutSel">rien de sélectionné</span>
+    <span class="grow"></span>
+    <button id="cutAdd" class="tb primary">＋ ajouter cette pièce</button>
+  </div>
+</div>
+
+<script src="pieces.json.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

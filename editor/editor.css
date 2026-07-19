@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');
+:root{
+  --ink:#0e1118; --ink2:#161b26; --plate:#222836; --plate2:#2c3444;
+  --or:#e8731c; --or2:#ffa040; --red:#cc1518; --leaf:#3a8a4a;
+  --txt:#e8ecf2; --dim:#8a93a4; --line:#333c4e;
+  --titre:'Russo One',Impact,sans-serif; --ui:system-ui,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--txt);font-family:var(--ui);overflow:hidden}
+#app{display:grid;grid-template-columns:236px minmax(0,1fr) 276px;height:100vh;overflow:hidden}
+aside{background:var(--ink2);display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line)}
+.hd{font-family:var(--titre);font-size:12px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--or);padding:12px 13px 8px;border-bottom:1px solid var(--line)}
+.hd b{color:var(--txt)}
+
+/* perso */
+#perso{margin:10px 12px;background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:8px;padding:8px;font-family:var(--ui);font-size:13px}
+
+/* recherche pieces */
+.search{display:flex;align-items:center;gap:8px;padding:0 12px 8px}
+.search input{flex:1;background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:6px 9px;font-family:var(--mono);font-size:11px}
+#pieceCount{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap}
+
+/* grille de pieces */
+#pieces{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px;display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;align-content:start}
+.pc{background:var(--plate);border:1px solid var(--line);border-radius:6px;cursor:pointer;
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding:3px;
+  transition:.1s;position:relative}
+.pc:hover{border-color:var(--or);background:var(--plate2);transform:scale(1.06);z-index:2}
+.pc canvas{max-width:100%;max-height:100%;image-rendering:pixelated;display:block}
+
+/* scene */
+#center{display:flex;flex-direction:column;background:#0b0e14;overflow:hidden;min-width:0;min-height:0}
+#toolbar{display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--ink2);
+  border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tb{background:var(--plate);color:var(--txt);border:1px solid var(--line);border-radius:7px;
+  padding:6px 11px;font-family:var(--ui);font-size:12px;cursor:pointer;white-space:nowrap}
+.tb:hover{background:var(--plate2);border-color:var(--or)}
+.tb.on{background:var(--or);border-color:var(--or2);color:#12161d}
+.sep{width:1px;height:20px;background:var(--line)}
+.grow{flex:1}
+.fps{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.fps input{width:44px;background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:5px;padding:3px 5px;font-family:var(--mono)}
+.chk{font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px;cursor:pointer}
+#hint{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+#stageWrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:14px}
+#stage{background:
+   repeating-conic-gradient(#12161f 0% 25%, #171c28 0% 50%) 50%/22px 22px;
+  border:1px solid var(--line);border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:crosshair}
+
+/* proprietes piece */
+#props{display:flex;align-items:center;gap:11px;padding:9px 12px;background:var(--ink2);
+  border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--dim);flex-wrap:wrap}
+#props .pk{color:var(--or2)}
+#pSel{color:var(--txt);min-width:80px}
+#props label{display:flex;align-items:center;gap:5px}
+#props input[type=number]{width:56px;background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:5px;padding:4px 6px;font-family:var(--mono)}
+
+/* animations */
+#animList{overflow-y:auto;overflow-x:hidden;max-height:200px;padding:6px 8px;flex:0 0 auto}
+.an{display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:7px;cursor:pointer;
+  font-family:var(--mono);font-size:12px;color:var(--txt);margin-bottom:3px;border:1px solid transparent}
+.an:hover{background:var(--plate)}
+.an.on{background:var(--plate2);border-color:var(--or)}
+.an .n{flex:1}
+.an .c{font-size:10px;color:var(--dim)}
+.an .x{color:var(--dim);padding:0 3px}
+.an .x:hover{color:var(--red)}
+.addAnim{display:flex;gap:6px;padding:6px 10px}
+.addAnim input{flex:1;background:var(--plate);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:6px 8px;font-family:var(--mono);font-size:11px}
+.addAnim button{background:var(--or);color:#12161d;border:0;border-radius:7px;width:34px;font-size:16px;cursor:pointer}
+
+/* frames */
+#frames{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:6px 10px;min-height:74px;flex:0 0 auto}
+.fr{flex:0 0 auto;width:60px;height:60px;background:var(--plate);border:2px solid var(--line);
+  border-radius:7px;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center}
+.fr canvas{max-width:100%;max-height:100%;image-rendering:pixelated}
+.fr.on{border-color:var(--or)}
+.fr .i{position:absolute;top:1px;left:3px;font-family:var(--mono);font-size:9px;color:var(--or2)}
+.fr .x{position:absolute;top:0;right:2px;color:var(--dim);cursor:pointer;font-size:11px}
+.fr .x:hover{color:var(--red)}
+.wide{width:calc(100% - 20px);margin:2px 10px;background:var(--plate);color:var(--txt);
+  border:1px solid var(--line);border-radius:8px;padding:9px;font-family:var(--ui);font-size:12.5px;cursor:pointer}
+.wide:hover{background:var(--plate2);border-color:var(--or)}
+.wide.primary{background:var(--or);border-color:var(--or2);color:#12161d;font-weight:600}
+.wide.primary:hover{background:var(--or2)}
+.expBtns{padding:0 0 4px}
+#saveMsg{font-family:var(--mono);font-size:11px;color:var(--leaf);padding:4px 12px;min-height:20px}
+
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:var(--plate2);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#3a4356}
+
+/* ---------- compteur pièces ---------- */
+.pcount{font-family:var(--mono);font-size:10px;color:var(--dim);padding:0 12px 6px}
+.search #cutBtn{padding:6px 9px;font-size:11px}
+
+/* ---------- atelier de découpe (overlay) ---------- */
+#cutter{position:fixed;inset:0;z-index:50;background:rgba(8,10,15,.97);
+  display:none;flex-direction:column;backdrop-filter:blur(3px)}
+#cutter.on{display:flex}
+#cutBar,#cutFoot{display:flex;align-items:center;gap:10px;padding:11px 16px;background:var(--ink2);
+  border-bottom:1px solid var(--line)}
+#cutFoot{border-bottom:0;border-top:1px solid var(--line)}
+#cutBar b{font-family:var(--titre);font-size:13px;letter-spacing:.5px;color:var(--or)}
+#cutBar b span{color:var(--txt)}
+.cfps{font-family:var(--mono);font-size:11px;color:var(--dim)}
+#cutHint{font-family:var(--mono);font-size:11px;color:var(--dim)}
+#cutSel{font-family:var(--mono);font-size:12px;color:var(--or2)}
+#cutScroll{flex:1;overflow:auto;padding:20px;display:flex;justify-content:center}
+#cutCv{image-rendering:pixelated;background:
+   repeating-conic-gradient(#12161f 0% 25%, #171c28 0% 50%) 50%/20px 20px;
+   align-self:flex-start;cursor:crosshair;border:1px solid var(--line);border-radius:6px}
+.tb.primary{background:var(--or);border-color:var(--or2);color:#12161d;font-weight:600}
+.tb.primary:hover{background:var(--or2)}
+
+/* frame : poignée de glissement + insertion */
+.fr{cursor:grab}
+.fr.drag{opacity:.4}
+.fr.dropL{box-shadow:-3px 0 0 var(--or)}
+.fr.dropR{box-shadow:3px 0 0 var(--or)}
+
+.pc .pcDel{position:absolute;top:-3px;right:-3px;width:15px;height:15px;border-radius:50%;
+  background:var(--red);color:#fff;font-size:9px;line-height:15px;text-align:center;
+  display:none;cursor:pointer;z-index:3}
+.pc:hover .pcDel{display:block}
+
+/* champ de renommage d'une anim */
+.renInp{flex:1;background:var(--ink);color:var(--or2);border:1px solid var(--or);border-radius:5px;
+  padding:4px 7px;font-family:var(--mono);font-size:12px;min-width:0}
+
+/* badge fps + crayon dans la liste d'anims */
+.an .afps{font-size:9px;color:var(--or2);background:rgba(232,115,28,.13);border-radius:4px;
+  padding:1px 5px;cursor:pointer}
+.an .ren{color:var(--dim);padding:0 2px;cursor:pointer}
+.an .ren:hover{color:var(--or)}
